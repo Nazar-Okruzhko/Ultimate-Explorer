@@ -1,21 +1,24 @@
-// -------------------------------------------------------------------------------
-//  WINDOWS EXPLORER  �  Pixel-Perfect GDI+ Recreation
+// ═══════════════════════════════════════════════════════════════════════════════
+//  WINDOWS EXPLORER  –  Pixel-Perfect GDI+ Recreation
 //  C# .NET Framework 4.8  |  Single File  |  Custom GDI+ Rendering
-// -------------------------------------------------------------------------------
-//  ICONS  ?  Place 24�24 PNG files in:  <exe-dir>\Explorer.exe\icons\Win10\
+// ───────────────────────────────────────────────────────────────────────────────
+//  ICONS  →  Place 24×24 PNG files in:  <exe-dir>\Explorer.exe\icons\Win10\
 //
-//  Required icon names (filename without .png):
-//    backward_arrow        forward_arrow         previous_small_arrow
-//    up_arrow              reload                search
-//    organize              new_folder            change_view
-//    more_options          preview_pane          help
-//    quick_access          this_pc               network
-//    desktop               downloads             documents
-//    pictures              music                 videos
-//    3dobjects             drives                folder
-//    file
-//  All 24�24 pixels.  Missing icons show a generated placeholder.
-// -------------------------------------------------------------------------------
+//  Required icon names (no extension):
+//    backward_arrow   forward_arrow   up_arrow   search
+//    change_view      more_options    preview_pane   help
+//    quick_access     this_pc         network
+//    desktop          downloads       documents      pictures
+//    music            videos          3dobjects      drives
+//    folder           file
+//
+//  Changes vs v1:
+//    • Organize & New Folder buttons: text-only (no icon)
+//    • All dropdown / context menus: no icons; image-margin kept for spacing
+//    • Organize dropdown: guaranteed to fire (DoLayout forced in ctor)
+//    • Column headers: white by default, #D9EBF9 on hover
+//    • Column headers: fully resizable via drag (cursor changes at divider)
+// ═══════════════════════════════════════════════════════════════════════════════
  
 using System;
 using System.Collections.Generic;
@@ -30,9 +33,9 @@ using System.Windows.Forms;
  
 namespace WinExplorer
 {
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     //  Entry Point
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     static class Program
     {
         [STAThread]
@@ -44,27 +47,26 @@ namespace WinExplorer
         }
     }
  
-    // --------------------------------------------------------------------------
-    //  Theme  (all colours / fonts in one place)
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  Theme
+    // ──────────────────────────────────────────────────────────────────────────
     static class Th
     {
-        public static readonly Color Bg         = Color.FromArgb(240, 240, 240);
-        public static readonly Color SelFill    = Color.FromArgb(204, 232, 255);   // #CCE8FF
-        public static readonly Color SelBorder  = Color.FromArgb(153, 209, 255);   // #99D1FF
-        public static readonly Color HoverFill  = Color.FromArgb(229, 241, 251);
-        public static readonly Color HoverBord  = Color.FromArgb(0, 120, 215);
-        public static readonly Color PressFill  = Color.FromArgb(204, 228, 247);
-        public static readonly Color PressBord  = Color.FromArgb(0, 84, 153);
-        public static readonly Color SepColor   = Color.FromArgb(208, 208, 208);
-        public static readonly Color Border     = Color.FromArgb(180, 180, 180);
-        public static readonly Color PaneSep    = Color.FromArgb(213, 213, 213);
-        public static readonly Color HdrBg      = Color.FromArgb(240, 240, 240);
-        public static readonly Color HdrBorder  = Color.FromArgb(200, 200, 200);
-        public static readonly Color TreeBg     = Color.White;
-        public static readonly Color ContentBg  = Color.White;
-        public static readonly Color TxtColor   = Color.FromArgb(0, 0, 0);
-        public static readonly Color TxtDisabled= Color.FromArgb(130, 130, 130);
+        public static readonly Color Bg          = Color.FromArgb(240, 240, 240);
+        public static readonly Color SelFill     = Color.FromArgb(204, 232, 255);  // #CCE8FF
+        public static readonly Color SelBorder   = Color.FromArgb(153, 209, 255);  // #99D1FF
+        public static readonly Color HoverFill   = Color.FromArgb(229, 241, 251);
+        public static readonly Color HoverBord   = Color.FromArgb(0, 120, 215);
+        public static readonly Color PressFill   = Color.FromArgb(204, 228, 247);
+        public static readonly Color PressBord   = Color.FromArgb(0, 84, 153);
+        public static readonly Color SepColor    = Color.FromArgb(208, 208, 208);
+        public static readonly Color Border      = Color.FromArgb(180, 180, 180);
+        public static readonly Color PaneSep     = Color.FromArgb(213, 213, 213);
+        public static readonly Color HdrHover    = Color.FromArgb(217, 235, 249);  // #D9EBF9
+        public static readonly Color TreeBg      = Color.White;
+        public static readonly Color ContentBg   = Color.White;
+        public static readonly Color TxtColor    = Color.FromArgb(0, 0, 0);
+        public static readonly Color TxtDisabled = Color.FromArgb(130, 130, 130);
  
         public static readonly Font UiFont  = new Font("Segoe UI", 9f);
         public static readonly Font UiSmall = new Font("Segoe UI", 8f);
@@ -89,17 +91,22 @@ namespace WinExplorer
                 g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
         }
  
-        // Draw a small solid downward triangle  ?
+        /// Small solid downward triangle ▼
         public static void DrawDropArrow(Graphics g, int cx, int cy, Color col)
         {
-            Point[] pts = { new Point(cx - 3, cy - 2), new Point(cx + 3, cy - 2), new Point(cx, cy + 2) };
+            Point[] pts =
+            {
+                new Point(cx - 3, cy - 2),
+                new Point(cx + 3, cy - 2),
+                new Point(cx,     cy + 2)
+            };
             using (var b = new SolidBrush(col)) g.FillPolygon(b, pts);
         }
     }
  
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     //  Icon Cache / Loader
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     static class Icons
     {
         static readonly string Dir = Path.Combine(
@@ -122,8 +129,11 @@ namespace WinExplorer
                     else
                     {
                         var bmp = new Bitmap(24, 24);
-                        using (var g = Graphics.FromImage(bmp))
-                        { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(raw, 0, 0, 24, 24); }
+                        using (var gg = Graphics.FromImage(bmp))
+                        {
+                            gg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            gg.DrawImage(raw, 0, 0, 24, 24);
+                        }
                         raw.Dispose(); img = bmp;
                     }
                 }
@@ -140,63 +150,49 @@ namespace WinExplorer
             using (var g = Graphics.FromImage(bmp))
             {
                 g.Clear(Color.Transparent);
-                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.SmoothingMode    = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
  
                 bool isFolder = IsFolder(name);
-                bool isArrow  = name.Contains("arrow") || name == "backward" || name == "forward";
  
                 if (isFolder)
                 {
-                    // Solid folder silhouette
                     using (var bf = new SolidBrush(Color.FromArgb(255, 213, 84)))
-                    {
-                        g.FillRectangle(bf, 2, 9, 20, 12);
-                        g.FillRectangle(bf, 2, 6, 8, 4);
-                    }
+                    { g.FillRectangle(bf, 2, 9, 20, 12); g.FillRectangle(bf, 2, 6, 8, 4); }
                     using (var pf = new Pen(Color.FromArgb(190, 150, 30), 1f))
-                    {
-                        g.DrawRectangle(pf, 2, 9, 19, 11);
-                        g.DrawRectangle(pf, 2, 6, 7, 3);
-                    }
+                    { g.DrawRectangle(pf, 2, 9, 19, 11); g.DrawRectangle(pf, 2, 6, 7, 3); }
                 }
-                else if (isArrow || name.Contains("backward") || name.Contains("forward") || name.Contains("up_arrow"))
+                else if (name.Contains("backward") || name.Contains("back"))
                 {
                     using (var p = new Pen(Color.FromArgb(70, 130, 180), 2f) { EndCap = LineCap.Round, StartCap = LineCap.Round })
-                    {
-                        if (name.Contains("backward") || name.Contains("back"))
-                        { g.DrawLine(p, 17, 12, 7, 12); g.DrawLine(p, 7, 12, 12, 7); g.DrawLine(p, 7, 12, 12, 17); }
-                        else if (name.Contains("forward"))
-                        { g.DrawLine(p, 7, 12, 17, 12); g.DrawLine(p, 17, 12, 12, 7); g.DrawLine(p, 17, 12, 12, 17); }
-                        else if (name.Contains("up"))
-                        { g.DrawLine(p, 12, 17, 12, 7); g.DrawLine(p, 12, 7, 7, 12); g.DrawLine(p, 12, 7, 17, 12); }
-                        else
-                        { g.DrawLine(p, 5, 12, 19, 12); g.DrawLine(p, 5, 12, 10, 7); g.DrawLine(p, 5, 12, 10, 17); }
-                    }
+                    { g.DrawLine(p, 17, 12, 7, 12); g.DrawLine(p, 7, 12, 12, 7); g.DrawLine(p, 7, 12, 12, 17); }
+                }
+                else if (name.Contains("forward"))
+                {
+                    using (var p = new Pen(Color.FromArgb(70, 130, 180), 2f) { EndCap = LineCap.Round, StartCap = LineCap.Round })
+                    { g.DrawLine(p, 7, 12, 17, 12); g.DrawLine(p, 17, 12, 12, 7); g.DrawLine(p, 17, 12, 12, 17); }
+                }
+                else if (name.Contains("up"))
+                {
+                    using (var p = new Pen(Color.FromArgb(70, 130, 180), 2f) { EndCap = LineCap.Round, StartCap = LineCap.Round })
+                    { g.DrawLine(p, 12, 17, 12, 7); g.DrawLine(p, 12, 7, 7, 12); g.DrawLine(p, 12, 7, 17, 12); }
                 }
                 else if (name == "search")
                 {
                     using (var p = new Pen(Color.FromArgb(80, 80, 80), 2f))
-                    {
-                        g.DrawEllipse(p, 4, 4, 12, 12);
-                        g.DrawLine(p, 14, 14, 19, 19);
-                    }
+                    { g.DrawEllipse(p, 4, 4, 12, 12); g.DrawLine(p, 14, 14, 19, 19); }
                 }
                 else if (name == "preview_pane")
                 {
                     using (var p = new Pen(Color.FromArgb(80, 80, 80), 1.5f))
-                    {
-                        g.DrawRectangle(p, 3, 4, 18, 16);
-                        g.DrawLine(p, 12, 4, 12, 20);
-                    }
+                    { g.DrawRectangle(p, 3, 4, 18, 16); g.DrawLine(p, 12, 4, 12, 20); }
                 }
                 else if (name == "help")
                 {
-                    using (var p = new Pen(Color.FromArgb(0, 102, 204), 2f))
-                        g.DrawEllipse(p, 2, 2, 19, 19);
+                    using (var p = new Pen(Color.FromArgb(0, 102, 204), 2f)) g.DrawEllipse(p, 2, 2, 19, 19);
                     using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                        g.DrawString("?", new Font("Segoe UI", 10f, FontStyle.Bold), new SolidBrush(Color.FromArgb(0, 102, 204)),
-                            new RectangleF(0, 0, 24, 24), fmt);
+                        g.DrawString("?", new Font("Segoe UI", 10f, FontStyle.Bold),
+                            new SolidBrush(Color.FromArgb(0, 102, 204)), new RectangleF(0, 0, 24, 24), fmt);
                 }
                 else if (name == "network")
                 {
@@ -221,71 +217,45 @@ namespace WinExplorer
                 {
                     using (var p = new Pen(Color.FromArgb(80, 80, 80), 1.5f))
                     {
-                        g.DrawRectangle(p, 2, 3, 8, 7);
-                        g.DrawRectangle(p, 14, 3, 8, 7);
-                        g.DrawRectangle(p, 2, 14, 8, 7);
-                        g.DrawRectangle(p, 14, 14, 8, 7);
+                        g.DrawRectangle(p, 2, 3, 8, 7);   g.DrawRectangle(p, 14, 3, 8, 7);
+                        g.DrawRectangle(p, 2, 14, 8, 7);  g.DrawRectangle(p, 14, 14, 8, 7);
                     }
                 }
-                else if (name == "new_folder")
+                else if (name == "quick_access")
                 {
-                    // folder with +
-                    using (var bf = new SolidBrush(Color.FromArgb(255, 213, 84)))
-                    { g.FillRectangle(bf, 2, 9, 16, 11); g.FillRectangle(bf, 2, 6, 8, 4); }
-                    using (var p = new Pen(Color.FromArgb(80, 80, 80), 2f))
-                    { g.DrawLine(p, 17, 13, 22, 13); g.DrawLine(p, 20, 10, 20, 17); }
-                }
-                else if (name == "organize")
-                {
-                    using (var p = new Pen(Color.FromArgb(80, 80, 80), 1.5f))
-                    {
-                        g.DrawLine(p, 3, 6, 21, 6); g.DrawLine(p, 3, 12, 21, 12); g.DrawLine(p, 3, 18, 21, 18);
-                        g.DrawLine(p, 3, 3, 3, 21);
-                    }
+                    Point[] star = GetStarPoints(12, 12, 9, 4, 5);
+                    using (var b = new SolidBrush(Color.FromArgb(255, 185, 0))) g.FillPolygon(b, star);
                 }
                 else if (name == "file")
                 {
                     using (var p = new Pen(Color.FromArgb(80, 80, 80), 1.5f))
                     {
-                        var pts = new Point[] { new Point(5, 3), new Point(15, 3), new Point(19, 7), new Point(19, 21), new Point(5, 21) };
-                        g.DrawPolygon(p, pts);
+                        g.DrawPolygon(p, new[] { new Point(5,3), new Point(15,3), new Point(19,7), new Point(19,21), new Point(5,21) });
                         g.DrawLine(p, 15, 3, 15, 7); g.DrawLine(p, 15, 7, 19, 7);
-                    }
-                }
-                else if (name == "quick_access")
-                {
-                    // Star icon
-                    using (var b = new SolidBrush(Color.FromArgb(255, 185, 0)))
-                    {
-                        Point[] star = GetStarPoints(12, 12, 10, 4, 5);
-                        g.FillPolygon(b, star);
                     }
                 }
                 else
                 {
-                    // Generic: small rectangle with label initial
                     using (var p = new Pen(Color.FromArgb(130, 130, 130), 1f))
                         g.DrawRectangle(p, 3, 3, 17, 17);
                     using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         g.DrawString(name.Length > 0 ? name[0].ToString().ToUpper() : "?",
-                            new Font("Segoe UI", 7f), Brushes.Gray,
-                            new RectangleF(0, 0, 24, 24), fmt);
+                            new Font("Segoe UI", 7f), Brushes.Gray, new RectangleF(0, 0, 24, 24), fmt);
                 }
             }
             return bmp;
         }
  
-        static bool IsFolder(string name) =>
-            name == "folder" || name == "quick_access" || name == "desktop" ||
-            name == "downloads" || name == "documents" || name == "pictures" ||
-            name == "music" || name == "videos" || name == "3dobjects" ||
-            name == "drives" || name == "this_pc";
+        static bool IsFolder(string n) =>
+            n == "folder" || n == "quick_access" || n == "desktop" || n == "downloads" ||
+            n == "documents" || n == "pictures" || n == "music" || n == "videos" ||
+            n == "3dobjects" || n == "drives" || n == "this_pc";
  
-        static Point[] GetStarPoints(int cx, int cy, int outerR, int innerR, int numPoints)
+        static Point[] GetStarPoints(int cx, int cy, int outerR, int innerR, int np)
         {
-            var pts = new Point[numPoints * 2];
-            double step = Math.PI / numPoints;
-            for (int i = 0; i < numPoints * 2; i++)
+            var pts = new Point[np * 2];
+            double step = Math.PI / np;
+            for (int i = 0; i < np * 2; i++)
             {
                 double a = i * step - Math.PI / 2;
                 int r = (i % 2 == 0) ? outerR : innerR;
@@ -295,27 +265,27 @@ namespace WinExplorer
         }
     }
  
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     //  Data Models
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     enum SortCol  { Name, Date, Type, Size }
     enum SortDir  { Asc, Desc }
     enum ViewMode { Details, LargeIcons, MediumIcons, SmallIcons, List,
                     ExtraLargeIcons, Tiles, Content }
  
-    class TreeNode2          // avoid conflict with WinForms TreeNode
+    class TreeNode2
     {
-        public string  Label;
-        public string  Path;       // null for virtual roots
-        public string  IconName;
-        public bool    Expanded;
-        public bool    IsVirtual;
-        public bool    IsRoot;     // Quick Access / This PC / Network
-        public int     Level;
+        public string Label;
+        public string Path;
+        public string IconName;
+        public bool   Expanded;
+        public bool   IsVirtual;
+        public bool   IsRoot;
+        public int    Level;
         public List<TreeNode2> Children = new List<TreeNode2>();
         public TreeNode2 Parent;
-        public bool    HasChildren;   // allows expand arrow even before load
-        public Rectangle Bounds;      // filled during draw pass
+        public bool HasChildren;
+        public Rectangle Bounds;
     }
  
     class ContentItem
@@ -330,17 +300,17 @@ namespace WinExplorer
  
         public string SizeStr =>
             IsDirectory ? "" :
-            Size < 1024            ? $"{Size} B" :
-            Size < 1_048_576       ? $"{Size / 1024.0:F1} KB" :
-                                     $"{Size / 1_048_576.0:F1} MB";
+            Size < 1024       ? $"{Size} B" :
+            Size < 1_048_576  ? $"{Size / 1024.0:F1} KB" :
+                                $"{Size / 1_048_576.0:F1} MB";
  
         public string DateStr => DateModified == default ? "" :
             DateModified.ToString("M/d/yyyy h:mm tt");
     }
  
-    // --------------------------------------------------------------------------
-    //  Custom Menu Renderer (Windows-10-style menus with icons)
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  Menu Renderer – no icons, image-margin column still visible for spacing
+    // ──────────────────────────────────────────────────────────────────────────
     class ExplorerMenuRenderer : ToolStripProfessionalRenderer
     {
         public ExplorerMenuRenderer() : base(new ExplorerColorTable()) { }
@@ -350,8 +320,8 @@ namespace WinExplorer
             if (!e.Item.Available) return;
             if (e.Item.Selected && e.Item.Enabled)
             {
-                var r = new Rectangle(2, 0, e.Item.Width - 4, e.Item.Height - 1);
                 e.Graphics.Clear(Color.White);
+                var r = new Rectangle(2, 0, e.Item.Width - 4, e.Item.Height - 1);
                 Th.DrawSel(e.Graphics, r);
             }
             else e.Graphics.Clear(Color.White);
@@ -361,7 +331,7 @@ namespace WinExplorer
         {
             int y = e.Item.Height / 2;
             using (var p = new Pen(Th.SepColor))
-                e.Graphics.DrawLine(p, 30, y, e.Item.Width - 4, y);
+                e.Graphics.DrawLine(p, 28, y, e.Item.Width - 4, y);
         }
  
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
@@ -386,48 +356,75 @@ namespace WinExplorer
             base.OnRenderArrow(e);
         }
  
+        // Keep image margin but draw nothing for items without images
+        protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
+        {
+            // Draw the light grey image column to the left
+            using (var b = new SolidBrush(Color.FromArgb(245, 245, 245)))
+                e.Graphics.FillRectangle(b, new Rectangle(0, 0, 24, e.ToolStrip.Height));
+        }
+ 
         protected override void OnRenderItemImage(ToolStripItemImageRenderEventArgs e)
         {
-            if (e.Image == null) return;
-            var r = e.ImageRectangle;
-            e.Graphics.DrawImage(e.Image, r.X, r.Y, 16, 16);
+            // Items intentionally have no images; nothing to draw
         }
     }
  
     class ExplorerColorTable : ProfessionalColorTable
     {
-        public override Color MenuBorder                       => Th.Border;
-        public override Color MenuItemBorder                   => Color.Transparent;
-        public override Color MenuItemSelected                 => Th.SelFill;
-        public override Color MenuItemSelectedGradientBegin    => Th.SelFill;
-        public override Color MenuItemSelectedGradientEnd      => Th.SelFill;
-        public override Color ToolStripDropDownBackground      => Color.White;
-        public override Color ImageMarginGradientBegin         => Color.White;
-        public override Color ImageMarginGradientMiddle        => Color.White;
-        public override Color ImageMarginGradientEnd           => Color.White;
+        public override Color MenuBorder                    => Th.Border;
+        public override Color MenuItemBorder                => Color.Transparent;
+        public override Color MenuItemSelected              => Th.SelFill;
+        public override Color MenuItemSelectedGradientBegin => Th.SelFill;
+        public override Color MenuItemSelectedGradientEnd   => Th.SelFill;
+        public override Color ToolStripDropDownBackground   => Color.White;
+        public override Color ImageMarginGradientBegin      => Color.FromArgb(245, 245, 245);
+        public override Color ImageMarginGradientMiddle     => Color.FromArgb(245, 245, 245);
+        public override Color ImageMarginGradientEnd        => Color.FromArgb(245, 245, 245);
     }
  
-    // --------------------------------------------------------------------------
-    //  TOP NAVIGATION BAR
-    //  Height: 34 px
-    //  Layout (L?R): Back(28) � Fwd(28) � RecentLoc(14) � Up(28) �
-    //                [PathBox fills] � RecentFold(14) � [12] � [SearchBox 202] � [12]
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  Helper: build a menu item (no image, but margin kept)
+    // ──────────────────────────────────────────────────────────────────────────
+    static class MenuHelper
+    {
+        static readonly ExplorerMenuRenderer Renderer = new ExplorerMenuRenderer();
+ 
+        public static ContextMenuStrip NewMenu()
+        {
+            var m = new ContextMenuStrip { Renderer = Renderer };
+            return m;
+        }
+ 
+        public static ToolStripMenuItem Item(string text, bool hasSub = false)
+        {
+            return new ToolStripMenuItem(text) { Font = Th.UiFont };
+        }
+ 
+        public static ToolStripMenuItem Sub(string text)
+        {
+            var m = new ToolStripMenuItem(text) { Font = Th.UiFont };
+            return m;
+        }
+    }
+ 
+    // ──────────────────────────────────────────────────────────────────────────
+    //  TOP NAVIGATION BAR  (34 px tall)
+    //  Back · Forward · ▼ · Up  |  [PathBox]  ▼  |  [12px] [SearchBox 202px] [12px]
+    // ──────────────────────────────────────────────────────────────────────────
     class TopNavBar : Panel
     {
         public const int BAR_H = 34;
-        const int BTN_Y  = 6;   // top of icon area
-        const int BTN_H  = 22;  // height of icon area (=path box height)
-        const int ICON   = 16;  // icon draw size inside buttons
+        const int BTN_Y  = 6;
+        const int BTN_H  = 22;
+        const int ICON   = 16;
  
-        // Button rectangles (recalculated in Resize)
         Rectangle _rBack, _rFwd, _rRecLoc, _rUp, _rRecFold;
  
-        // Hover / press tracking
-        enum HitBtn { None, Back, Fwd, RecLoc, Up, RecFold }
-        HitBtn _hov = HitBtn.None, _prs = HitBtn.None;
+        enum HBtn { None, Back, Fwd, RecLoc, Up, RecFold }
+        HBtn _hov = HBtn.None, _prs = HBtn.None;
  
-        bool _backEnabled = false, _fwdEnabled = false;
+        bool _backEnabled, _fwdEnabled;
  
         TextBox _pathBox;
         Panel   _searchPanel;
@@ -439,12 +436,8 @@ namespace WinExplorer
         public event Action<string> Navigate;
         public event Action<string> SearchChanged;
  
-        public string CurrentPath
-        {
-            get => _pathBox.Text;
-            set { _pathBox.Text = value; }
-        }
-        public bool BackEnabled  { get => _backEnabled; set { _backEnabled = value; Invalidate(); } }
+        public string CurrentPath { get => _pathBox.Text; set => _pathBox.Text = value; }
+        public bool BackEnabled    { get => _backEnabled; set { _backEnabled = value; Invalidate(); } }
         public bool ForwardEnabled { get => _fwdEnabled; set { _fwdEnabled = value; Invalidate(); } }
  
         public TopNavBar()
@@ -454,13 +447,12 @@ namespace WinExplorer
             BackColor = Th.Bg;
             DoubleBuffered = true;
  
-            // Path TextBox
             _pathBox = new TextBox
             {
                 BorderStyle = BorderStyle.None,
-                Font = Th.UiFont,
-                BackColor = Color.White,
-                ForeColor = Th.TxtColor,
+                Font        = Th.UiFont,
+                BackColor   = Color.White,
+                ForeColor   = Th.TxtColor,
             };
             _pathBox.KeyDown += (s, e) =>
             {
@@ -468,44 +460,47 @@ namespace WinExplorer
             };
             Controls.Add(_pathBox);
  
-            // Search Panel (custom bordered)
             _searchPanel = new Panel { BackColor = Color.White };
             _searchPanel.Paint += DrawSearchPanel;
  
             _searchBox = new TextBox
             {
                 BorderStyle = BorderStyle.None,
-                Font = Th.UiFont,
-                BackColor = Color.White,
-                ForeColor = Th.TxtDisabled,
-                Text = "Search",
+                Font        = Th.UiFont,
+                BackColor   = Color.White,
+                ForeColor   = Th.TxtDisabled,
+                Text        = "Search",
             };
-            _searchBox.GotFocus  += (s, e) => { if (_searchBox.Text == "Search") { _searchBox.Text = ""; _searchBox.ForeColor = Th.TxtColor; } };
-            _searchBox.LostFocus += (s, e) => { if (_searchBox.Text == "") { _searchBox.Text = "Search"; _searchBox.ForeColor = Th.TxtDisabled; } };
+            _searchBox.GotFocus  += (s, e) =>
+            {
+                if (_searchBox.Text == "Search") { _searchBox.Text = ""; _searchBox.ForeColor = Th.TxtColor; }
+            };
+            _searchBox.LostFocus += (s, e) =>
+            {
+                if (_searchBox.Text == "") { _searchBox.Text = "Search"; _searchBox.ForeColor = Th.TxtDisabled; }
+            };
             _searchBox.TextChanged += (s, e) => SearchChanged?.Invoke(_searchBox.Text);
  
             _searchPanel.Controls.Add(_searchBox);
             Controls.Add(_searchPanel);
  
-            // Mouse events
-            MouseMove   += OnMM;
-            MouseDown   += OnMD;
-            MouseUp     += OnMU;
-            MouseLeave  += (s, e) => { _hov = HitBtn.None; Invalidate(); };
+            MouseMove  += OnMM;
+            MouseDown  += OnMD;
+            MouseUp    += OnMU;
+            MouseLeave += (s, e) => { _hov = HBtn.None; Invalidate(); };
+            Resize     += (s, e) => DoLayout();
  
-            // Layout on resize
-            Resize += (s, e) => DoLayout();
+            DoLayout();
         }
+ 
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); DoLayout(); }
  
         void DrawSearchPanel(object sender, PaintEventArgs e)
         {
-            var g = e.Graphics;
-            g.Clear(Color.White);
+            e.Graphics.Clear(Color.White);
             using (var p = new Pen(Th.PaneSep))
-                g.DrawRectangle(p, 0, 0, _searchPanel.Width - 1, _searchPanel.Height - 1);
-            // Search icon on right
-            var icon = Icons.Get("search");
-            g.DrawImage(icon, _searchPanel.Width - 20, 3, 14, 14);
+                e.Graphics.DrawRectangle(p, 0, 0, _searchPanel.Width - 1, _searchPanel.Height - 1);
+            e.Graphics.DrawImage(Icons.Get("search"), _searchPanel.Width - 20, 3, 14, 14);
         }
  
         void DoLayout()
@@ -516,85 +511,76 @@ namespace WinExplorer
             _rRecLoc = new Rectangle(x, BTN_Y, 14, BTN_H); x += 14 + 2;
             _rUp     = new Rectangle(x, BTN_Y, 28, BTN_H); x += 28 + 2;
  
-            // Path box: from x to (Width - 12 - 202 - 12 - 14 - 2)
-            const int searchW  = 202;
-            const int padRight = 12;
-            const int recFW    = 14;
-            int pathRight = Width - padRight - searchW - padRight - recFW - 2;
+            const int searchW = 202, padR = 12, recFW = 14;
+            int pathRight = Width - padR - searchW - padR - recFW - 2;
             int pathW     = Math.Max(40, pathRight - x - 1);
  
-            // PathBox inside a 22px-tall bordered area
-            int pbX = x, pbY = BTN_Y, pbW = pathW, pbH = BTN_H;
-            _pathBox.SetBounds(pbX + 3, pbY + 3, pbW - 6, pbH - 6);
+            _pathBox.SetBounds(x + 3, BTN_Y + 3, pathW - 6, BTN_H - 6);
  
             x += pathW + 2;
             _rRecFold = new Rectangle(x, BTN_Y, recFW, BTN_H); x += recFW + 12;
  
-            // Search panel
             _searchPanel.SetBounds(x, BTN_Y, searchW, BTN_H);
             _searchBox.SetBounds(3, 3, searchW - 22, BTN_H - 6);
         }
  
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
             var g = e.Graphics;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.Clear(Th.Bg);
  
-            // Bottom divider
-            using (var p = new Pen(Th.PaneSep))
-                g.DrawLine(p, 0, Height - 1, Width, Height - 1);
+            using (var p = new Pen(Th.PaneSep)) g.DrawLine(p, 0, Height - 1, Width, Height - 1);
  
-            DrawNavBtn(g, _rBack,    "backward_arrow", _backEnabled,   HitBtn.Back);
-            DrawNavBtn(g, _rFwd,     "forward_arrow",  _fwdEnabled,    HitBtn.Fwd);
-            DrawDropArrowBtn(g, _rRecLoc, HitBtn.RecLoc);
-            DrawNavBtn(g, _rUp,      "up_arrow",       true,           HitBtn.Up);
+            DrawNavBtn(g, _rBack,   "backward_arrow", _backEnabled, HBtn.Back);
+            DrawNavBtn(g, _rFwd,    "forward_arrow",  _fwdEnabled,  HBtn.Fwd);
+            DrawDropArrowBtn(g, _rRecLoc, HBtn.RecLoc);
+            DrawNavBtn(g, _rUp,     "up_arrow",       true,         HBtn.Up);
  
             // Path box border
-            int pbX = _pathBox.Left - 3, pbY = BTN_Y;
-            int pbW = _pathBox.Width + 6, pbH = BTN_H;
+            int pbX = _pathBox.Left - 3;
             using (var p = new Pen(Th.PaneSep))
-                g.DrawRectangle(p, pbX, pbY, pbW - 1, pbH - 1);
+                g.DrawRectangle(p, pbX, BTN_Y, _pathBox.Width + 5, BTN_H - 1);
  
-            DrawDropArrowBtn(g, _rRecFold, HitBtn.RecFold);
+            DrawDropArrowBtn(g, _rRecFold, HBtn.RecFold);
         }
  
-        void DrawNavBtn(Graphics g, Rectangle r, string icon, bool enabled, HitBtn btn)
+        void DrawNavBtn(Graphics g, Rectangle r, string icon, bool enabled, HBtn btn)
         {
             if (_prs == btn && enabled) Th.DrawPress(g, r);
             else if (_hov == btn && enabled) Th.DrawHover(g, r);
  
-            var img  = Icons.Get(icon);
-            int ix   = r.X + (r.Width  - ICON) / 2;
-            int iy   = r.Y + (r.Height - ICON) / 2;
-            if (enabled) g.DrawImage(img, ix, iy, ICON, ICON);
+            var img = Icons.Get(icon);
+            int ix  = r.X + (r.Width  - ICON) / 2;
+            int iy  = r.Y + (r.Height - ICON) / 2;
+            if (enabled)
+            {
+                g.DrawImage(img, ix, iy, ICON, ICON);
+            }
             else
             {
                 var attrs = new System.Drawing.Imaging.ImageAttributes();
-                var cm    = new System.Drawing.Imaging.ColorMatrix();
-                cm.Matrix33 = 0.35f;
+                var cm    = new System.Drawing.Imaging.ColorMatrix { Matrix33 = 0.35f };
                 attrs.SetColorMatrix(cm);
-                g.DrawImage(img, new Rectangle(ix, iy, ICON, ICON),
-                    0, 0, ICON, ICON, GraphicsUnit.Pixel, attrs);
+                g.DrawImage(img, new Rectangle(ix, iy, ICON, ICON), 0, 0, ICON, ICON, GraphicsUnit.Pixel, attrs);
             }
         }
  
-        void DrawDropArrowBtn(Graphics g, Rectangle r, HitBtn btn)
+        void DrawDropArrowBtn(Graphics g, Rectangle r, HBtn btn)
         {
             if (_prs == btn) Th.DrawPress(g, r);
             else if (_hov == btn) Th.DrawHover(g, r);
             Th.DrawDropArrow(g, r.X + r.Width / 2, r.Y + r.Height / 2, Th.TxtColor);
         }
  
-        HitBtn HitTest(Point pt)
+        HBtn HitTest(Point pt)
         {
-            if (_rBack.Contains(pt))    return HitBtn.Back;
-            if (_rFwd.Contains(pt))     return HitBtn.Fwd;
-            if (_rRecLoc.Contains(pt))  return HitBtn.RecLoc;
-            if (_rUp.Contains(pt))      return HitBtn.Up;
-            if (_rRecFold.Contains(pt)) return HitBtn.RecFold;
-            return HitBtn.None;
+            if (_rBack.Contains(pt))    return HBtn.Back;
+            if (_rFwd.Contains(pt))     return HBtn.Fwd;
+            if (_rRecLoc.Contains(pt))  return HBtn.RecLoc;
+            if (_rUp.Contains(pt))      return HBtn.Up;
+            if (_rRecFold.Contains(pt)) return HBtn.RecFold;
+            return HBtn.None;
         }
  
         void OnMM(object s, MouseEventArgs e) { var h = HitTest(e.Location); if (h != _hov) { _hov = h; Invalidate(); } }
@@ -602,60 +588,42 @@ namespace WinExplorer
         void OnMU(object s, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
-            var hit = HitTest(e.Location);
-            _prs = HitBtn.None;
-            if (hit == HitBtn.Back   && _backEnabled) BackClick?.Invoke(this, EventArgs.Empty);
-            else if (hit == HitBtn.Fwd && _fwdEnabled) ForwardClick?.Invoke(this, EventArgs.Empty);
-            else if (hit == HitBtn.Up) UpClick?.Invoke(this, EventArgs.Empty);
+            var hit = HitTest(e.Location); _prs = HBtn.None;
+            if (hit == HBtn.Back && _backEnabled)   BackClick?.Invoke(this, EventArgs.Empty);
+            else if (hit == HBtn.Fwd && _fwdEnabled) ForwardClick?.Invoke(this, EventArgs.Empty);
+            else if (hit == HBtn.Up)                UpClick?.Invoke(this, EventArgs.Empty);
             Invalidate();
-        }
- 
-        protected override void OnCreateControl()
-        {
-            base.OnCreateControl();
-            DoLayout();
         }
     }
  
-    // --------------------------------------------------------------------------
-    //  COMMAND BAR
-    //  Height: 31 px
-    //  Layout (L?R): [3] � Organize(91�26) � [2] � NewFolder(88�26) � [flex] �
-    //                ChangeView(27�26) � MoreOptions(19�26) � [10] �
-    //                Preview(28�26) � [8] � Help(28�26) � [9]
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  COMMAND BAR  (31 px tall)
+    //  [3] Organize(91×26) [2] NewFolder(88×26) [flex]
+    //      ChangeView(27×26) MoreOptions(19×26) [10] Preview(28×26) [8] Help(28×26) [9]
+    //
+    //  Organize & New Folder: TEXT ONLY (no icon) – as in real Windows Explorer
+    // ──────────────────────────────────────────────────────────────────────────
     class CommandBar : Panel
     {
-        public const int BAR_H   = 31;
-        const int BTN_Y  = 3;    // top of buttons (31 - 26 = 5 ? (5-2)/2 � 2, use 3 for slight padding difference)
-        const int BTN_H  = 26;
-        const int ICON   = 16;
+        public const int BAR_H = 31;
+        const int BTN_Y = 3;
+        const int BTN_H = 26;
  
-        enum HitBtn
-        {
-            None,
-            Organize, OrganizeDrop,
-            NewFolder,
-            ChangeView, MoreOptions,
-            Preview,
-            Help
-        }
-        HitBtn _hov = HitBtn.None, _prs = HitBtn.None;
+        enum HBtn { None, Organize, OrganizeDrop, NewFolder, ChangeView, MoreOptions, Preview, Help }
+        HBtn _hov = HBtn.None, _prs = HBtn.None;
  
         Rectangle _rOrg, _rOrgDrop;
         Rectangle _rNF;
         Rectangle _rCV, _rMO;
         Rectangle _rPrev, _rHelp;
  
+        ContextMenuStrip _organizeMenu;
+        ContextMenuStrip _viewMenu;
+ 
         public event EventHandler NewFolderClick;
         public event EventHandler PreviewPaneClick;
         public event EventHandler HelpClick;
         public event Action<ViewMode> ViewChanged;
- 
-        // Organize dropdown
-        ContextMenuStrip _organizeMenu;
-        // View more-options dropdown
-        ContextMenuStrip _viewMenu;
  
         public CommandBar()
         {
@@ -664,28 +632,33 @@ namespace WinExplorer
             BackColor = Th.Bg;
             DoubleBuffered = true;
  
+            // Build menus BEFORE layout so they're ready on first click
             BuildOrganizeMenu();
             BuildViewMenu();
  
-            MouseMove   += OnMM;
-            MouseDown   += OnMD;
-            MouseUp     += OnMU;
-            MouseLeave  += (s, e) => { _hov = HitBtn.None; Invalidate(); };
-            Resize      += (s, e) => DoLayout();
+            MouseMove  += OnMM;
+            MouseDown  += OnMD;
+            MouseUp    += OnMU;
+            MouseLeave += (s, e) => { _hov = HBtn.None; Invalidate(); };
+            Resize     += (s, e) => DoLayout();
+ 
+            // Force initial layout immediately
+            DoLayout();
         }
+ 
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); DoLayout(); }
  
         void DoLayout()
         {
             int x = 3;
-            // Organize: main part (91 - 16 for drop arrow) + drop arrow (16)
-            int orgMain = 75, orgDrop = 16;
-            _rOrg     = new Rectangle(x, BTN_Y, orgMain, BTN_H);
-            _rOrgDrop = new Rectangle(x + orgMain, BTN_Y, orgDrop, BTN_H);
-            x += 91 + 2;
+            _rOrg     = new Rectangle(x,      BTN_Y, 75, BTN_H);   // main part
+            _rOrgDrop = new Rectangle(x + 75, BTN_Y, 16, BTN_H);   // arrow part (total = 91)
+            x += 93;  // 91 + 2 gap
  
-            _rNF = new Rectangle(x, BTN_Y, 88, BTN_H); x += 88;
+            _rNF = new Rectangle(x, BTN_Y, 88, BTN_H);
+            x += 90;
  
-            // Right-side buttons: work from right
+            // Right-side buttons: anchor from right edge
             int rx = Width - 9;
             rx -= 28; _rHelp = new Rectangle(rx, BTN_Y, 28, BTN_H);
             rx -= 8;
@@ -695,35 +668,37 @@ namespace WinExplorer
             rx -= 27; _rCV   = new Rectangle(rx, BTN_Y, 27, BTN_H);
         }
  
+        // ── Organize menu  (no icons; image-margin gives the indent) ──────────
         void BuildOrganizeMenu()
         {
-            _organizeMenu = new ContextMenuStrip { Renderer = new ExplorerMenuRenderer() };
+            _organizeMenu = MenuHelper.NewMenu();
             _organizeMenu.Items.AddRange(new ToolStripItem[]
             {
-                MItem("Cut",    "file"),
-                MItem("Copy",   "file"),
-                MItem("Paste",  "file"),
-                MItem("Undo",   "backward_arrow"),
-                MItem("Redo",   "forward_arrow"),
+                MenuHelper.Item("Cut"),
+                MenuHelper.Item("Copy"),
+                MenuHelper.Item("Paste"),
+                MenuHelper.Item("Undo"),
+                MenuHelper.Item("Redo"),
                 new ToolStripSeparator(),
-                MItem("Select All", null),
+                MenuHelper.Item("Select All"),
                 new ToolStripSeparator(),
-                MItem("Layout",    null),
-                MItem("Options",   null),
+                MenuHelper.Item("Layout"),
+                MenuHelper.Item("Options"),
                 new ToolStripSeparator(),
-                MItem("Delete",    null),
-                MItem("Rename",    null),
-                MItem("Remove Properties", null),
-                MItem("Properties", null),
+                MenuHelper.Item("Delete"),
+                MenuHelper.Item("Rename"),
+                MenuHelper.Item("Remove Properties"),
+                MenuHelper.Item("Properties"),
                 new ToolStripSeparator(),
-                MItem("Close",  null),
+                MenuHelper.Item("Close"),
             });
         }
  
         void BuildViewMenu()
         {
-            _viewMenu = new ContextMenuStrip { Renderer = new ExplorerMenuRenderer() };
-            var modes = new[] {
+            _viewMenu = MenuHelper.NewMenu();
+            var modes = new (string label, ViewMode vm)[]
+            {
                 ("Extra Large Icons", ViewMode.ExtraLargeIcons),
                 ("Large Icons",       ViewMode.LargeIcons),
                 ("Medium Icons",      ViewMode.MediumIcons),
@@ -735,199 +710,163 @@ namespace WinExplorer
             };
             foreach (var (label, vm) in modes)
             {
-                var vm2 = vm;
-                var item = MItem(label, "change_view");
+                var vm2  = vm;
+                var item = MenuHelper.Item(label);
                 item.Click += (s, e) => ViewChanged?.Invoke(vm2);
                 _viewMenu.Items.Add(item);
             }
         }
  
-        static ToolStripMenuItem MItem(string text, string iconName)
-        {
-            var item = new ToolStripMenuItem(text)
-            {
-                Font = Th.UiFont,
-            };
-            if (iconName != null)
-            {
-                var img16 = Icons.Get(iconName);
-                var bmp   = new Bitmap(16, 16);
-                using (var g = Graphics.FromImage(bmp))
-                { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(img16, 0, 0, 16, 16); }
-                item.Image = bmp;
-            }
-            return item;
-        }
- 
+        // ── Paint ─────────────────────────────────────────────────────────────
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.Clear(Th.Bg);
  
-            // Bottom divider
-            using (var p = new Pen(Th.PaneSep))
-                g.DrawLine(p, 0, Height - 1, Width, Height - 1);
+            using (var p = new Pen(Th.PaneSep)) g.DrawLine(p, 0, Height - 1, Width, Height - 1);
  
-            // Organize button (split)
-            DrawSplitBtn(g, _rOrg, _rOrgDrop, "organize", "Organize",
-                showText: true, hovMain: _hov == HitBtn.Organize, hovDrop: _hov == HitBtn.OrganizeDrop,
-                prsMain: _prs == HitBtn.Organize, prsDrop: _prs == HitBtn.OrganizeDrop);
+            // Organize – split button (text only, no icon)
+            DrawSplitTextBtn(g, _rOrg, _rOrgDrop, "Organize",
+                _hov == HBtn.Organize, _hov == HBtn.OrganizeDrop,
+                _prs == HBtn.Organize, _prs == HBtn.OrganizeDrop);
  
-            // New Folder button
-            DrawCmdBtn(g, _rNF, "new_folder", "New folder", _hov == HitBtn.NewFolder, _prs == HitBtn.NewFolder);
+            // New Folder – plain text button (no icon)
+            DrawTextBtn(g, _rNF, "New folder", _hov == HBtn.NewFolder, _prs == HBtn.NewFolder);
  
-            // Change View button
-            DrawCmdBtn(g, _rCV, "change_view", null, _hov == HitBtn.ChangeView, _prs == HitBtn.ChangeView);
+            // Change View – icon only
+            DrawIconBtn(g, _rCV, "change_view", _hov == HBtn.ChangeView, _prs == HBtn.ChangeView);
  
-            // More Options (drop arrow only, immediately adjacent)
-            DrawDropOnlyBtn(g, _rMO, _hov == HitBtn.MoreOptions, _prs == HitBtn.MoreOptions);
+            // More Options – tiny drop arrow only
+            DrawDropOnlyBtn(g, _rMO, _hov == HBtn.MoreOptions, _prs == HBtn.MoreOptions);
  
-            // Thin vertical separator between ChangeView and MoreOptions
+            // Separator between ChangeView and MoreOptions
             using (var sp = new Pen(Th.SepColor))
-                g.DrawLine(sp, _rMO.Left, _rMO.Top + 2, _rMO.Left, _rMO.Bottom - 2);
+                g.DrawLine(sp, _rMO.Left, _rMO.Top + 3, _rMO.Left, _rMO.Bottom - 3);
  
             // Preview pane
-            DrawCmdBtn(g, _rPrev, "preview_pane", null, _hov == HitBtn.Preview, _prs == HitBtn.Preview);
+            DrawIconBtn(g, _rPrev, "preview_pane", _hov == HBtn.Preview, _prs == HBtn.Preview);
  
             // Help
-            DrawCmdBtn(g, _rHelp, "help", null, _hov == HitBtn.Help, _prs == HitBtn.Help);
+            DrawIconBtn(g, _rHelp, "help", _hov == HBtn.Help, _prs == HBtn.Help);
         }
  
-        void DrawCmdBtn(Graphics g, Rectangle r, string icon, string text,
-                        bool hover, bool press)
+        // Text-only button (no icon)
+        void DrawTextBtn(Graphics g, Rectangle r, string text, bool hover, bool press)
         {
-            if (press) Th.DrawPress(g, r);
+            if (press)      Th.DrawPress(g, r);
             else if (hover) Th.DrawHover(g, r);
  
-            int ix, iy;
-            if (text != null)
-            {
-                ix = r.X + 4; iy = r.Y + (r.Height - ICON) / 2;
-                g.DrawImage(Icons.Get(icon), ix, iy, ICON, ICON);
-                var tf = new RectangleF(ix + ICON + 3, r.Y, r.Width - ICON - 10, r.Height);
-                using (var fmt = new StringFormat { LineAlignment = StringAlignment.Center })
-                    g.DrawString(text, Th.UiFont, Brushes.Black, tf, fmt);
-            }
-            else
-            {
-                ix = r.X + (r.Width  - ICON) / 2;
-                iy = r.Y + (r.Height - ICON) / 2;
-                g.DrawImage(Icons.Get(icon), ix, iy, ICON, ICON);
-            }
+            using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                g.DrawString(text, Th.UiFont, Brushes.Black, r, fmt);
         }
  
-        void DrawSplitBtn(Graphics g,
-                          Rectangle rMain, Rectangle rDrop,
-                          string icon, string text,
-                          bool showText,
-                          bool hovMain, bool hovDrop,
-                          bool prsMain, bool prsDrop)
+        // Split button – left=text, right=arrow; separator between them
+        void DrawSplitTextBtn(Graphics g, Rectangle rMain, Rectangle rDrop, string text,
+                              bool hovMain, bool hovDrop, bool prsMain, bool prsDrop)
         {
-            if (prsMain) Th.DrawPress(g, rMain);
+            if (prsMain)      Th.DrawPress(g, rMain);
             else if (hovMain) Th.DrawHover(g, rMain);
  
-            if (prsDrop) Th.DrawPress(g, rDrop);
+            if (prsDrop)      Th.DrawPress(g, rDrop);
             else if (hovDrop) Th.DrawHover(g, rDrop);
  
-            // icon + text in main part
-            int ix = rMain.X + 4, iy = rMain.Y + (rMain.Height - ICON) / 2;
-            g.DrawImage(Icons.Get(icon), ix, iy, ICON, ICON);
-            if (showText)
+            // Draw outer border around the whole split button when either half is hot
+            if (hovMain || hovDrop || prsMain || prsDrop)
             {
-                var tf = new RectangleF(ix + ICON + 3, rMain.Y, rMain.Width - ICON - 7, rMain.Height);
-                using (var fmt = new StringFormat { LineAlignment = StringAlignment.Center })
-                    g.DrawString(text, Th.UiFont, Brushes.Black, tf, fmt);
+                var outer = Rectangle.Union(rMain, rDrop);
+                using (var p = new Pen(hovMain || hovDrop ? Th.HoverBord : Th.PressBord))
+                    g.DrawRectangle(p, outer.X, outer.Y, outer.Width - 1, outer.Height - 1);
             }
  
-            // separator line between main and drop
-            using (var sp = new Pen(Th.SepColor))
-                g.DrawLine(sp, rDrop.Left, rDrop.Top + 2, rDrop.Left, rDrop.Bottom - 2);
+            // Label in main part
+            using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                g.DrawString(text, Th.UiFont, Brushes.Black, rMain, fmt);
  
-            // drop arrow
+            // Divider between main and drop
+            using (var sp = new Pen(Th.SepColor))
+                g.DrawLine(sp, rDrop.Left, rDrop.Top + 3, rDrop.Left, rDrop.Bottom - 3);
+ 
+            // Arrow
             Th.DrawDropArrow(g, rDrop.X + rDrop.Width / 2, rDrop.Y + rDrop.Height / 2, Th.TxtColor);
+        }
+ 
+        void DrawIconBtn(Graphics g, Rectangle r, string icon, bool hover, bool press)
+        {
+            if (press)      Th.DrawPress(g, r);
+            else if (hover) Th.DrawHover(g, r);
+            var img = Icons.Get(icon);
+            g.DrawImage(img, r.X + (r.Width - 16) / 2, r.Y + (r.Height - 16) / 2, 16, 16);
         }
  
         void DrawDropOnlyBtn(Graphics g, Rectangle r, bool hover, bool press)
         {
-            if (press) Th.DrawPress(g, r);
+            if (press)      Th.DrawPress(g, r);
             else if (hover) Th.DrawHover(g, r);
             Th.DrawDropArrow(g, r.X + r.Width / 2, r.Y + r.Height / 2 + 1, Th.TxtColor);
         }
  
-        HitBtn HitTest(Point pt)
+        // ── Hit-test & Mouse ─────────────────────────────────────────────────
+        HBtn HitTest(Point pt)
         {
-            if (_rOrg.Contains(pt))     return HitBtn.Organize;
-            if (_rOrgDrop.Contains(pt)) return HitBtn.OrganizeDrop;
-            if (_rNF.Contains(pt))      return HitBtn.NewFolder;
-            if (_rCV.Contains(pt))      return HitBtn.ChangeView;
-            if (_rMO.Contains(pt))      return HitBtn.MoreOptions;
-            if (_rPrev.Contains(pt))    return HitBtn.Preview;
-            if (_rHelp.Contains(pt))    return HitBtn.Help;
-            return HitBtn.None;
+            if (_rOrg.Contains(pt))     return HBtn.Organize;
+            if (_rOrgDrop.Contains(pt)) return HBtn.OrganizeDrop;
+            if (_rNF.Contains(pt))      return HBtn.NewFolder;
+            if (_rCV.Contains(pt))      return HBtn.ChangeView;
+            if (_rMO.Contains(pt))      return HBtn.MoreOptions;
+            if (_rPrev.Contains(pt))    return HBtn.Preview;
+            if (_rHelp.Contains(pt))    return HBtn.Help;
+            return HBtn.None;
         }
  
         void OnMM(object s, MouseEventArgs e) { var h = HitTest(e.Location); if (h != _hov) { _hov = h; Invalidate(); } }
         void OnMD(object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) { _prs = HitTest(e.Location); Invalidate(); } }
+ 
         void OnMU(object s, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
             var hit = HitTest(e.Location);
-            _prs = HitBtn.None;
+            _prs = HBtn.None;
             Invalidate();
  
             switch (hit)
             {
-                case HitBtn.OrganizeDrop:
+                case HBtn.Organize:
+                case HBtn.OrganizeDrop:
                     _organizeMenu.Show(this, new Point(_rOrg.Left, BAR_H));
                     break;
-                case HitBtn.Organize:
-                    _organizeMenu.Show(this, new Point(_rOrg.Left, BAR_H));
-                    break;
-                case HitBtn.NewFolder:
+                case HBtn.NewFolder:
                     NewFolderClick?.Invoke(this, EventArgs.Empty);
                     break;
-                case HitBtn.ChangeView:
+                case HBtn.ChangeView:
+                case HBtn.MoreOptions:
                     _viewMenu.Show(this, new Point(_rCV.Left, BAR_H));
                     break;
-                case HitBtn.MoreOptions:
-                    _viewMenu.Show(this, new Point(_rCV.Left, BAR_H));
-                    break;
-                case HitBtn.Preview:
+                case HBtn.Preview:
                     PreviewPaneClick?.Invoke(this, EventArgs.Empty);
                     break;
-                case HitBtn.Help:
+                case HBtn.Help:
                     HelpClick?.Invoke(this, EventArgs.Empty);
                     break;
             }
         }
- 
-        protected override void OnCreateControl()
-        {
-            base.OnCreateControl();
-            DoLayout();
-        }
     }
  
-    // --------------------------------------------------------------------------
-    //  TREE PANE  (left panel � Quick Access / This PC / Network)
-    //  Vertical scrollbar only; 2 px right margin
-    //  Root indent: 24px; child indent: +8px per level
-    //  Row height: 20 px
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  TREE PANE
+    // ──────────────────────────────────────────────────────────────────────────
     class TreePane : Panel
     {
-        const int ROW_H      = 20;
-        const int ROOT_INDENT= 8;   // left margin before level-0 items
-        const int LVL_INDENT = 16;  // pixels per level
-        const int ICON_SZ    = 16;
-        const int ARROW_W    = 12;
+        const int ROW_H       = 20;
+        const int ROOT_INDENT = 8;
+        const int LVL_INDENT  = 16;
+        const int ICON_SZ     = 16;
+        const int ARROW_W     = 12;
  
-        List<TreeNode2> _flat   = new List<TreeNode2>();
-        TreeNode2       _root;    // invisible root
+        List<TreeNode2> _flat = new List<TreeNode2>();
+        TreeNode2       _root;
         TreeNode2       _selected;
-        int             _scrollY = 0;
-        int             _totalH  = 0;
+        int             _scrollY = 0, _totalH = 0;
  
         VScrollBar _vsb;
  
@@ -940,10 +879,8 @@ namespace WinExplorer
  
             _vsb = new VScrollBar
             {
-                Dock    = DockStyle.Right,
-                Minimum = 0, Maximum = 0,
-                SmallChange = ROW_H, LargeChange = 100,
-                Visible = false,
+                Dock = DockStyle.Right, Minimum = 0, Maximum = 0,
+                SmallChange = ROW_H, LargeChange = 100, Visible = false
             };
             _vsb.ValueChanged += (s, e) => { _scrollY = _vsb.Value; Invalidate(); };
             Controls.Add(_vsb);
@@ -959,64 +896,55 @@ namespace WinExplorer
         {
             _root = new TreeNode2 { Label = "__root__", IsVirtual = true, Expanded = true };
  
-            // -- Quick Access -------------------------------------------
-            var qa = AddChild(_root, "Quick access", null, "quick_access", isVirtual: true, isRoot: true);
+            var qa = Add(_root, "Quick access", null, "quick_access", isVirtual: true, isRoot: true);
             qa.Expanded = true;
-            AddChild(qa, "Desktop",   SpecialDir(Environment.SpecialFolder.DesktopDirectory), "desktop");
-            AddChild(qa, "Downloads", GetDownloads(), "downloads");
-            AddChild(qa, "Documents", SpecialDir(Environment.SpecialFolder.MyDocuments),  "documents");
-            AddChild(qa, "Pictures",  SpecialDir(Environment.SpecialFolder.MyPictures),   "pictures");
+            Add(qa, "Desktop",   SpecialDir(Environment.SpecialFolder.DesktopDirectory), "desktop");
+            Add(qa, "Downloads", GetDownloads(),                                          "downloads");
+            Add(qa, "Documents", SpecialDir(Environment.SpecialFolder.MyDocuments),       "documents");
+            Add(qa, "Pictures",  SpecialDir(Environment.SpecialFolder.MyPictures),        "pictures");
  
-            // -- This PC ------------------------------------------------
-            var tpc = AddChild(_root, "This PC", null, "this_pc", isVirtual: true, isRoot: true);
-            AddChild(tpc, "3D Objects", null,                                    "3dobjects");
-            AddChild(tpc, "Desktop",    SpecialDir(Environment.SpecialFolder.DesktopDirectory), "desktop");
-            AddChild(tpc, "Documents",  SpecialDir(Environment.SpecialFolder.MyDocuments),  "documents");
-            AddChild(tpc, "Downloads",  GetDownloads(),  "downloads");
-            AddChild(tpc, "Music",      SpecialDir(Environment.SpecialFolder.MyMusic),       "music");
-            AddChild(tpc, "Pictures",   SpecialDir(Environment.SpecialFolder.MyPictures),    "pictures");
-            AddChild(tpc, "Videos",     SpecialDir(Environment.SpecialFolder.MyVideos),      "videos");
+            var tpc = Add(_root, "This PC", null, "this_pc", isVirtual: true, isRoot: true);
+            Add(tpc, "3D Objects", null,                                                   "3dobjects");
+            Add(tpc, "Desktop",    SpecialDir(Environment.SpecialFolder.DesktopDirectory), "desktop");
+            Add(tpc, "Documents",  SpecialDir(Environment.SpecialFolder.MyDocuments),      "documents");
+            Add(tpc, "Downloads",  GetDownloads(),                                         "downloads");
+            Add(tpc, "Music",      SpecialDir(Environment.SpecialFolder.MyMusic),          "music");
+            Add(tpc, "Pictures",   SpecialDir(Environment.SpecialFolder.MyPictures),       "pictures");
+            Add(tpc, "Videos",     SpecialDir(Environment.SpecialFolder.MyVideos),         "videos");
  
-            // Drives
             foreach (var drive in DriveInfo.GetDrives())
             {
                 try
                 {
-                    string label = drive.IsReady && !string.IsNullOrEmpty(drive.VolumeLabel)
+                    string lbl = drive.IsReady && !string.IsNullOrEmpty(drive.VolumeLabel)
                         ? $"{drive.VolumeLabel} ({drive.Name.TrimEnd('\\')})"
                         : $"Local Disk ({drive.Name.TrimEnd('\\')})";
-                    var d = AddChild(tpc, label, drive.RootDirectory.FullName, "drives");
+                    var d = Add(tpc, lbl, drive.RootDirectory.FullName, "drives");
                     d.HasChildren = true;
                 }
                 catch { }
             }
  
-            // -- Network -----------------------------------------------
-            AddChild(_root, "Network", null, "network", isVirtual: true, isRoot: true);
- 
+            Add(_root, "Network", null, "network", isVirtual: true, isRoot: true);
             Rebuild();
         }
  
-        static string SpecialDir(Environment.SpecialFolder sf) =>
-            Environment.GetFolderPath(sf);
- 
-        static string GetDownloads() =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
- 
-        TreeNode2 AddChild(TreeNode2 parent, string label, string path, string icon,
-                           bool isVirtual = false, bool isRoot = false)
+        TreeNode2 Add(TreeNode2 parent, string label, string path, string icon,
+                      bool isVirtual = false, bool isRoot = false)
         {
             var n = new TreeNode2
             {
                 Label = label, Path = path, IconName = icon,
-                IsVirtual = isVirtual, IsRoot = isRoot,
-                Parent = parent,
-                Level  = parent == _root ? 0 : parent.Level + 1,
+                IsVirtual = isVirtual, IsRoot = isRoot, Parent = parent,
+                Level = parent == _root ? 0 : parent.Level + 1,
                 HasChildren = !isVirtual && path != null,
             };
-            parent.Children.Add(n);
-            return n;
+            parent.Children.Add(n); return n;
         }
+ 
+        static string SpecialDir(Environment.SpecialFolder f) => Environment.GetFolderPath(f);
+        static string GetDownloads() => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
  
         void Rebuild()
         {
@@ -1029,27 +957,20 @@ namespace WinExplorer
         void Flatten(TreeNode2 n)
         {
             foreach (var c in n.Children)
-            {
-                _flat.Add(c);
-                if (c.Expanded) Flatten(c);
-            }
+            { _flat.Add(c); if (c.Expanded) Flatten(c); }
         }
  
         void UpdateScroll()
         {
-            int visH = ClientSize.Height;
-            if (_totalH > visH)
+            int vis = ClientSize.Height;
+            if (_totalH > vis)
             {
-                _vsb.Visible  = true;
-                _vsb.Maximum  = Math.Max(0, _totalH - visH + _vsb.LargeChange);
-                _scrollY      = Math.Min(_scrollY, Math.Max(0, _totalH - visH));
-                _vsb.Value    = _scrollY;
+                _vsb.Visible = true;
+                _vsb.Maximum = Math.Max(0, _totalH - vis + _vsb.LargeChange);
+                _scrollY     = Math.Min(_scrollY, Math.Max(0, _totalH - vis));
+                _vsb.Value   = _scrollY;
             }
-            else
-            {
-                _vsb.Visible = false;
-                _scrollY     = 0;
-            }
+            else { _vsb.Visible = false; _scrollY = 0; }
         }
  
         protected override void OnPaint(PaintEventArgs e)
@@ -1058,64 +979,47 @@ namespace WinExplorer
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.Clear(Th.TreeBg);
  
-            int listW = Width - (_vsb.Visible ? _vsb.Width : 0) - 2; // 2px right padding
+            int listW = Width - (_vsb.Visible ? _vsb.Width : 0) - 2;
             int y0    = -_scrollY;
  
             for (int i = 0; i < _flat.Count; i++)
             {
                 var n = _flat[i];
                 int y = y0 + i * ROW_H;
-                if (y + ROW_H < 0)  continue;
-                if (y > Height)     break;
+                if (y + ROW_H < 0) continue;
+                if (y > Height)    break;
  
                 n.Bounds = new Rectangle(0, y, listW, ROW_H);
  
-                bool sel = n == _selected;
-                if (sel) Th.DrawSel(g, new Rectangle(0, y, listW, ROW_H - 1));
+                if (n == _selected) Th.DrawSel(g, new Rectangle(0, y, listW, ROW_H - 1));
  
-                int indent = ROOT_INDENT + n.Level * LVL_INDENT;
- 
-                // Expand arrow
+                int indent  = ROOT_INDENT + n.Level * LVL_INDENT;
                 bool hasKids = n.Children.Count > 0 || n.HasChildren;
-                if (hasKids)
-                {
-                    int ax = indent - 2, ay = y + ROW_H / 2;
-                    DrawExpandArrow(g, ax, ay, n.Expanded);
-                }
  
-                // Icon
+                if (hasKids) DrawExpandArrow(g, indent - 2, y + ROW_H / 2, n.Expanded);
+ 
                 int iconX = indent + ARROW_W;
                 g.DrawImage(Icons.Get(n.IconName ?? "folder"), iconX, y + (ROW_H - ICON_SZ) / 2, ICON_SZ, ICON_SZ);
  
-                // Label
-                int labelX  = iconX + ICON_SZ + 3;
-                int labelW  = Math.Max(1, listW - labelX - 2);
-                var labelR  = new RectangleF(labelX, y + 1, labelW, ROW_H - 2);
-                var fmt     = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
-                var font    = n.IsRoot ? Th.UiBold : Th.UiFont;
-                g.DrawString(n.Label, font, Brushes.Black, labelR, fmt);
+                int labelX = iconX + ICON_SZ + 3;
+                using (var fmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter })
+                    g.DrawString(n.Label, n.IsRoot ? Th.UiBold : Th.UiFont,
+                        Brushes.Black, new RectangleF(labelX, y + 1, Math.Max(1, listW - labelX - 2), ROW_H - 2), fmt);
  
-                // Root category: thin line above (except first)
                 if (n.IsRoot && i > 0)
-                    using (var sp = new Pen(Th.SepColor))
-                        g.DrawLine(sp, 0, y, listW, y);
+                    using (var sp = new Pen(Th.SepColor)) g.DrawLine(sp, 0, y, listW, y);
             }
  
-            // Right-edge 2px border
-            using (var rp = new Pen(Th.PaneSep))
-                g.DrawLine(rp, listW, 0, listW, Height);
+            using (var rp = new Pen(Th.PaneSep)) g.DrawLine(rp, listW, 0, listW, Height);
         }
  
         static void DrawExpandArrow(Graphics g, int cx, int cy, bool expanded)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Point[] pts;
-            if (expanded)
-                pts = new[] { new Point(cx - 4, cy - 2), new Point(cx + 4, cy - 2), new Point(cx, cy + 3) };
-            else
-                pts = new[] { new Point(cx - 2, cy - 4), new Point(cx - 2, cy + 4), new Point(cx + 3, cy) };
-            using (var b = new SolidBrush(Color.FromArgb(100, 100, 100)))
-                g.FillPolygon(b, pts);
+            Point[] pts = expanded
+                ? new[] { new Point(cx - 4, cy - 2), new Point(cx + 4, cy - 2), new Point(cx, cy + 3) }
+                : new[] { new Point(cx - 2, cy - 4), new Point(cx - 2, cy + 4), new Point(cx + 3, cy) };
+            using (var b = new SolidBrush(Color.FromArgb(100, 100, 100))) g.FillPolygon(b, pts);
             g.SmoothingMode = SmoothingMode.Default;
         }
  
@@ -1125,63 +1029,48 @@ namespace WinExplorer
             if (idx < 0 || idx >= _flat.Count) return;
             var n = _flat[idx];
  
-            // Click on expand arrow?
-            int indent = ROOT_INDENT + n.Level * LVL_INDENT;
+            int indent  = ROOT_INDENT + n.Level * LVL_INDENT;
             bool hasKids = n.Children.Count > 0 || n.HasChildren;
             if (hasKids && e.X >= indent - 8 && e.X <= indent + ARROW_W)
-            {
-                ToggleExpand(n);
-                return;
-            }
+            { ToggleExpand(n); return; }
  
             _selected = n;
             Invalidate();
- 
-            if (e.Button == MouseButtons.Left)
-                NodeSelected?.Invoke(n);
+            if (e.Button == MouseButtons.Left) NodeSelected?.Invoke(n);
         }
  
         void ToggleExpand(TreeNode2 n)
         {
             if (!n.Expanded)
             {
-                // Load real filesystem children if needed
                 if (n.Children.Count == 0 && n.Path != null && !n.IsVirtual)
                     LoadFsChildren(n);
                 n.Expanded = true;
             }
             else n.Expanded = false;
-            Rebuild();
-            Invalidate();
+            Rebuild(); Invalidate();
         }
  
         void LoadFsChildren(TreeNode2 n)
         {
             try
             {
-                var dirs = Directory.GetDirectories(n.Path);
-                foreach (var d in dirs)
+                foreach (var d in Directory.GetDirectories(n.Path))
                 {
-                    var child = new TreeNode2
+                    n.Children.Add(new TreeNode2
                     {
-                        Label  = Path.GetFileName(d),
-                        Path   = d,
-                        IconName = "folder",
-                        Parent = n,
-                        Level  = n.Level + 1,
-                        HasChildren = true,
-                    };
-                    n.Children.Add(child);
+                        Label = Path.GetFileName(d), Path = d, IconName = "folder",
+                        Parent = n, Level = n.Level + 1, HasChildren = true,
+                    });
                 }
-                n.HasChildren = false; // already loaded
+                n.HasChildren = false;
             }
             catch { }
         }
  
         void OnMW(object s, MouseEventArgs e)
         {
-            _scrollY = Math.Max(0, Math.Min(_scrollY - e.Delta / 3,
-                Math.Max(0, _totalH - ClientSize.Height)));
+            _scrollY = Math.Max(0, Math.Min(_scrollY - e.Delta / 3, Math.Max(0, _totalH - ClientSize.Height)));
             if (_vsb.Visible) _vsb.Value = _scrollY;
             Invalidate();
         }
@@ -1194,49 +1083,49 @@ namespace WinExplorer
         }
     }
  
-    // --------------------------------------------------------------------------
-    //  CONTENT PANE  (right panel)
-    //  Column headers: Name | Date modified | Type | Size
-    //  Default view: Details
-    //  Multi-select: #CCE8FF fill, #99D1FF border
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  CONTENT PANE
+    //  Column headers: White default · #D9EBF9 on hover · fully resizable
+    // ──────────────────────────────────────────────────────────────────────────
     class ContentPane : Panel
     {
         const int HDR_H  = 22;
         const int ROW_H  = 20;
-        const int ICON_SZ= 16;
+        const int ICON_SZ = 16;
+        const int RESIZE_ZONE = 4;   // px from divider to show resize cursor
  
-        // Column widths
-        int _wName  = 300, _wDate = 160, _wType = 100, _wSize = 80;
+        // Column widths (Name fills remaining when _wName == 0)
+        int _wName = 0;   // 0 = auto-fill; set explicitly when user drags
+        int _wDate = 160;
+        int _wType = 100;
+        int _wSize = 80;
  
-        List<ContentItem> _items    = new List<ContentItem>();
-        HashSet<int>      _selSet   = new HashSet<int>();
-        int               _lastSel  = -1;
+        List<ContentItem> _items  = new List<ContentItem>();
+        HashSet<int>      _selSet = new HashSet<int>();
+        int               _lastSel = -1;
  
         SortCol _sortCol = SortCol.Name;
         SortDir _sortDir = SortDir.Asc;
         int     _scrollY = 0;
  
-        // Column header resize drag
-        enum ColDrag { None, Name, Date, Type }
-        ColDrag _drag = ColDrag.None;
-        int     _dragStartX, _dragStartW;
+        // Column-header state
+        int  _hdrHovCol  = -1;   // which col is hovered (-1 = none)
+        bool _hdrDrag    = false;
+        int  _hdrDragBnd  = -1;  // 0=Name|Date  1=Date|Type  2=Type|Size
+        int  _hdrDragStartX, _hdrDragStartW;
  
-        // Marquee selection
-        bool    _marquee;
-        Point   _marqStart, _marqCur;
+        // Marquee
+        bool  _marquee;
+        Point _marqStart, _marqCur;
  
-        // Hover
-        int     _hovRow = -1;
+        int   _hovRow = -1;
  
         VScrollBar _vsb;
  
+        ContextMenuStrip _bgMenu, _folderMenu, _fileMenu;
+ 
         public string CurrentPath { get; private set; } = "";
         public event Action<ContentItem> ItemActivated;
-        public event Action<ContentItem> ShowContextMenu;
- 
-        // Context menus
-        ContextMenuStrip _bgMenu, _folderMenu, _fileMenu;
  
         public ContentPane()
         {
@@ -1253,127 +1142,156 @@ namespace WinExplorer
             MouseMove   += OnMM;
             MouseUp     += OnMU;
             MouseWheel  += OnMW;
-            MouseLeave  += (s, e) => { _hovRow = -1; Invalidate(); };
+            MouseLeave  += (s, e) => { _hovRow = -1; _hdrHovCol = -1; Cursor = Cursors.Default; Invalidate(); };
             DoubleClick += OnDblClick;
             Resize      += (s, e) => UpdateScroll();
         }
  
-        // -- Load content from path ------------------------------------------
+        // ── Load ──────────────────────────────────────────────────────────────
         public void LoadPath(string path)
         {
             CurrentPath = path;
-            _items.Clear();
-            _selSet.Clear();
-            _lastSel = -1;
-            _scrollY = 0;
+            _items.Clear(); _selSet.Clear(); _lastSel = -1; _scrollY = 0;
  
-            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+            if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
             {
-                Invalidate();
-                return;
-            }
- 
-            try
-            {
-                foreach (var d in Directory.GetDirectories(path))
+                try
                 {
-                    try
+                    foreach (var d in Directory.GetDirectories(path))
                     {
-                        var di = new DirectoryInfo(d);
-                        _items.Add(new ContentItem
+                        try
                         {
-                            Name         = di.Name,
-                            FullPath     = di.FullName,
-                            DateModified = di.LastWriteTime,
-                            ItemType     = "File folder",
-                            Size         = 0,
-                            IsDirectory  = true,
-                        });
+                            var di = new DirectoryInfo(d);
+                            _items.Add(new ContentItem { Name = di.Name, FullPath = di.FullName,
+                                DateModified = di.LastWriteTime, ItemType = "File folder", IsDirectory = true });
+                        }
+                        catch { }
                     }
-                    catch { }
-                }
-                foreach (var f in Directory.GetFiles(path))
-                {
-                    try
+                    foreach (var f in Directory.GetFiles(path))
                     {
-                        var fi = new FileInfo(f);
-                        _items.Add(new ContentItem
+                        try
                         {
-                            Name         = fi.Name,
-                            FullPath     = fi.FullName,
-                            DateModified = fi.LastWriteTime,
-                            ItemType     = GetTypeString(fi.Extension),
-                            Size         = fi.Length,
-                            IsDirectory  = false,
-                        });
+                            var fi = new FileInfo(f);
+                            _items.Add(new ContentItem { Name = fi.Name, FullPath = fi.FullName,
+                                DateModified = fi.LastWriteTime, ItemType = GetTypeStr(fi.Extension),
+                                Size = fi.Length, IsDirectory = false });
+                        }
+                        catch { }
                     }
-                    catch { }
                 }
+                catch { }
             }
-            catch { }
- 
-            SortItems();
-            UpdateScroll();
-            Invalidate();
+            SortItems(); UpdateScroll(); Invalidate();
         }
  
-        static string GetTypeString(string ext)
+        static string GetTypeStr(string ext)
         {
             if (string.IsNullOrEmpty(ext)) return "File";
-            switch (ext.ToLower())
+            switch (ext.ToLowerInvariant())
             {
                 case ".txt":  return "Text Document";
-                case ".png":
-                case ".jpg":
-                case ".jpeg":
-                case ".bmp":  return "Image";
+                case ".png": case ".jpg": case ".jpeg": case ".bmp": case ".gif": return "Image";
                 case ".cs":   return "C# Source File";
                 case ".exe":  return "Application";
                 case ".dll":  return "Application Extension";
-                case ".zip":  return "Compressed (zipped) Folder";
+                case ".zip":  return "Compressed Folder";
                 case ".pdf":  return "PDF Document";
                 case ".mp3":  return "MP3 File";
                 case ".mp4":  return "MP4 Video";
-                default:      return ext.TrimStart('.').ToUpper() + " File";
+                default:      return ext.TrimStart('.').ToUpperInvariant() + " File";
             }
         }
  
         void SortItems()
         {
-            IEnumerable<ContentItem> sorted;
+            IEnumerable<ContentItem> s;
             switch (_sortCol)
             {
-                case SortCol.Name: sorted = _items.OrderBy(i => !i.IsDirectory).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase); break;
-                case SortCol.Date: sorted = _items.OrderBy(i => i.DateModified); break;
-                case SortCol.Type: sorted = _items.OrderBy(i => i.ItemType, StringComparer.OrdinalIgnoreCase); break;
-                case SortCol.Size: sorted = _items.OrderBy(i => i.Size); break;
-                default:           sorted = _items; break;
+                case SortCol.Name: s = _items.OrderBy(i => !i.IsDirectory).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase); break;
+                case SortCol.Date: s = _items.OrderBy(i => i.DateModified); break;
+                case SortCol.Type: s = _items.OrderBy(i => i.ItemType, StringComparer.OrdinalIgnoreCase); break;
+                case SortCol.Size: s = _items.OrderBy(i => i.Size); break;
+                default:           s = _items; break;
             }
-            if (_sortDir == SortDir.Desc) sorted = sorted.Reverse();
-            _items = sorted.ToList();
+            if (_sortDir == SortDir.Desc) s = s.Reverse();
+            _items = s.ToList();
         }
  
         void UpdateScroll()
         {
-            int total = _items.Count * ROW_H;
-            int vis   = ClientSize.Height - HDR_H;
-            if (total > vis)
-            {
-                _vsb.Visible     = true;
-                _vsb.Maximum     = Math.Max(0, total - vis + _vsb.LargeChange);
-                _vsb.SmallChange = ROW_H;
-                _vsb.LargeChange = Math.Max(1, vis);
-            }
-            else { _vsb.Visible = false; _scrollY = 0; }
+            int total = _items.Count * ROW_H, vis = Math.Max(1, ClientSize.Height - HDR_H);
+            if (total > vis) { _vsb.Visible = true; _vsb.Maximum = total - vis + 100; _vsb.LargeChange = vis; _vsb.SmallChange = ROW_H; }
+            else             { _vsb.Visible = false; _scrollY = 0; }
         }
  
-        // -- Paint ----------------------------------------------------------
+        // ── Column helpers ─────────────────────────────────────────────────────
+        int NameW => _wName > 0 ? _wName : Math.Max(80, ListWidth() - _wDate - _wType - _wSize);
+        int ListWidth() => Width - (_vsb.Visible ? _vsb.Width : 0);
+ 
+        // Returns (left-x, label, sortCol, width) for each column
+        (int x, string lbl, SortCol col, int w)[] ColDefs()
+        {
+            int nw = NameW;
+            return new[]
+            {
+                (0,                  "Name",          SortCol.Name, nw),
+                (nw,                 "Date modified", SortCol.Date, _wDate),
+                (nw + _wDate,        "Type",          SortCol.Type, _wType),
+                (nw + _wDate+_wType, "Size",          SortCol.Size, _wSize),
+            };
+        }
+ 
+        // Divider X positions: between col[i] and col[i+1]
+        int[] DividerXs()
+        {
+            int nw = NameW;
+            return new[] { nw, nw + _wDate, nw + _wDate + _wType };
+        }
+ 
+        int ColAtX(int x)
+        {
+            var cols = ColDefs();
+            for (int i = 0; i < cols.Length; i++)
+                if (x >= cols[i].x && x < cols[i].x + cols[i].w) return i;
+            return -1;
+        }
+ 
+        bool NearDivider(int x, out int boundary)
+        {
+            var divs = DividerXs();
+            for (int i = 0; i < divs.Length; i++)
+                if (Math.Abs(x - divs[i]) <= RESIZE_ZONE) { boundary = i; return true; }
+            boundary = -1; return false;
+        }
+ 
+        int GetDivStartWidth(int boundary)
+        {
+            switch (boundary)
+            {
+                case 0: return NameW;
+                case 1: return _wDate;
+                case 2: return _wType;
+                default: return 0;
+            }
+        }
+ 
+        void SetDivWidth(int boundary, int w)
+        {
+            w = Math.Max(40, w);
+            switch (boundary)
+            {
+                case 0: _wName = w; break;
+                case 1: _wDate = w; break;
+                case 2: _wType = w; break;
+            }
+        }
+ 
+        // ── Paint ──────────────────────────────────────────────────────────────
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.Clear(Th.ContentBg);
- 
             DrawHeader(g);
             DrawItems(g);
             if (_marquee) DrawMarquee(g);
@@ -1382,56 +1300,52 @@ namespace WinExplorer
         void DrawHeader(Graphics g)
         {
             int listW = ListWidth();
-            using (var hb = new SolidBrush(Th.HdrBg)) g.FillRectangle(hb, 0, 0, listW, HDR_H);
-            using (var hbord = new Pen(Th.HdrBorder)) g.DrawLine(hbord, 0, HDR_H - 1, listW, HDR_H - 1);
+            var cols  = ColDefs();
  
-            // Column positions
-            (int x, string label, SortCol col, int w)[] cols = ColDefs();
+            // White base
+            g.FillRectangle(Brushes.White, 0, 0, listW, HDR_H);
  
-            var fmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
- 
-            foreach (var (x, label, col, w) in cols)
+            using (var hb    = new SolidBrush(Th.HdrHover))
+            using (var sepP  = new Pen(Color.FromArgb(200, 200, 200)))
+            using (var botP  = new Pen(Color.FromArgb(213, 213, 213)))
+            using (var fmt   = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter })
             {
-                // Hover background
-                // Column header text
-                var r = new RectangleF(x + 4, 0, w - 8, HDR_H);
-                g.DrawString(label, Th.UiFont, Brushes.Black, r, fmt);
- 
-                // Sort indicator
-                if (col == _sortCol)
+                foreach (var (x, lbl, col, w) in cols)
                 {
-                    int ax = x + w - 12, ay = HDR_H / 2;
-                    if (_sortDir == SortDir.Asc)
-                    { Point[] p = { new Point(ax - 3, ay + 2), new Point(ax + 3, ay + 2), new Point(ax, ay - 2) }; g.FillPolygon(Brushes.Gray, p); }
-                    else
-                    { Point[] p = { new Point(ax - 3, ay - 2), new Point(ax + 3, ay - 2), new Point(ax, ay + 2) }; g.FillPolygon(Brushes.Gray, p); }
+                    // Hover highlight
+                    int ci = Array.IndexOf(cols.Select(c => c.col).ToArray(), col);
+                    if (ci == _hdrHovCol)
+                        g.FillRectangle(hb, x, 0, w, HDR_H - 1);
+ 
+                    // Label
+                    g.DrawString(lbl, Th.UiFont, Brushes.Black, new RectangleF(x + 6, 0, w - 12, HDR_H), fmt);
+ 
+                    // Sort indicator
+                    if (col == _sortCol)
+                    {
+                        int ax = x + w - 14, ay = HDR_H / 2;
+                        Point[] tri = _sortDir == SortDir.Asc
+                            ? new[] { new Point(ax - 3, ay + 2), new Point(ax + 3, ay + 2), new Point(ax, ay - 2) }
+                            : new[] { new Point(ax - 3, ay - 2), new Point(ax + 3, ay - 2), new Point(ax, ay + 2) };
+                        g.FillPolygon(Brushes.Gray, tri);
+                    }
+ 
+                    // Column divider
+                    if (x + w < listW)
+                        g.DrawLine(sepP, x + w, 2, x + w, HDR_H - 3);
                 }
  
-                // Column divider
-                if (x + w < listW)
-                    using (var sp = new Pen(Th.HdrBorder))
-                        g.DrawLine(sp, x + w - 1, 2, x + w - 1, HDR_H - 2);
+                // Bottom border
+                g.DrawLine(botP, 0, HDR_H - 1, listW, HDR_H - 1);
             }
-        }
- 
-        (int x, string label, SortCol col, int w)[] ColDefs()
-        {
-            int listW = ListWidth();
-            int nameW = listW - _wDate - _wType - _wSize;
-            return new[]
-            {
-                (0,                     "Name",          SortCol.Name, nameW),
-                (nameW,                 "Date modified", SortCol.Date, _wDate),
-                (nameW + _wDate,        "Type",          SortCol.Type, _wType),
-                (nameW + _wDate + _wType,"Size",         SortCol.Size, _wSize),
-            };
         }
  
         void DrawItems(Graphics g)
         {
-            int listW  = ListWidth();
-            var cols   = ColDefs();
-            var fmt    = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
+            int listW = ListWidth();
+            var cols  = ColDefs();
+            var rfmt  = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
+            var sfmt  = new StringFormat(rfmt) { Alignment = StringAlignment.Far };
  
             for (int i = 0; i < _items.Count; i++)
             {
@@ -1440,57 +1354,62 @@ namespace WinExplorer
                 if (y + ROW_H < HDR_H) continue;
                 if (y > Height)        break;
  
-                bool sel  = _selSet.Contains(i);
-                bool hov  = i == _hovRow;
+                bool sel = _selSet.Contains(i);
+                bool hov = i == _hovRow;
  
-                if (sel)  Th.DrawSel(g, new Rectangle(0, y, listW, ROW_H - 1));
-                else if (hov) Th.DrawHover(g, new Rectangle(0, y, listW, ROW_H - 1));
+                var rowR = new Rectangle(0, y, listW, ROW_H - 1);
+                if (sel)      Th.DrawSel(g, rowR);
+                else if (hov) Th.DrawHover(g, rowR);
  
                 // Icon + Name
-                string iconName = item.IsDirectory ? "folder" : "file";
-                g.DrawImage(Icons.Get(iconName), cols[0].x + 2, y + (ROW_H - ICON_SZ) / 2, ICON_SZ, ICON_SZ);
-                var nameR = new RectangleF(cols[0].x + ICON_SZ + 6, y, cols[0].w - ICON_SZ - 8, ROW_H);
-                g.DrawString(item.Name, Th.UiFont, Brushes.Black, nameR, fmt);
+                g.DrawImage(Icons.Get(item.IsDirectory ? "folder" : "file"),
+                    cols[0].x + 4, y + (ROW_H - ICON_SZ) / 2, ICON_SZ, ICON_SZ);
+                g.DrawString(item.Name, Th.UiFont, Brushes.Black,
+                    new RectangleF(cols[0].x + ICON_SZ + 8, y, cols[0].w - ICON_SZ - 12, ROW_H), rfmt);
  
                 // Date
-                var dateR = new RectangleF(cols[1].x + 4, y, cols[1].w - 8, ROW_H);
-                g.DrawString(item.DateStr, Th.UiFont, Brushes.Black, dateR, fmt);
+                g.DrawString(item.DateStr, Th.UiFont, Brushes.Black,
+                    new RectangleF(cols[1].x + 4, y, cols[1].w - 8, ROW_H), rfmt);
  
                 // Type
-                var typeR = new RectangleF(cols[2].x + 4, y, cols[2].w - 8, ROW_H);
-                g.DrawString(item.ItemType, Th.UiFont, Brushes.Black, typeR, fmt);
+                g.DrawString(item.ItemType, Th.UiFont, Brushes.Black,
+                    new RectangleF(cols[2].x + 4, y, cols[2].w - 8, ROW_H), rfmt);
  
-                // Size
-                var sizeR = new RectangleF(cols[3].x + 4, y, cols[3].w - 8, ROW_H);
-                var sfmt  = new StringFormat(fmt) { Alignment = StringAlignment.Far };
-                g.DrawString(item.SizeStr, Th.UiFont, Brushes.Black, sizeR, sfmt);
+                // Size (right-aligned)
+                g.DrawString(item.SizeStr, Th.UiFont, Brushes.Black,
+                    new RectangleF(cols[3].x + 4, y, cols[3].w - 8, ROW_H), sfmt);
  
                 // Row separator
-                using (var rp = new Pen(Color.FromArgb(240, 240, 240)))
+                using (var rp = new Pen(Color.FromArgb(242, 242, 242)))
                     g.DrawLine(rp, 0, y + ROW_H - 1, listW, y + ROW_H - 1);
             }
         }
  
         void DrawMarquee(Graphics g)
         {
-            int x = Math.Min(_marqStart.X, _marqCur.X);
-            int y = Math.Min(_marqStart.Y, _marqCur.Y);
-            int w = Math.Abs(_marqCur.X - _marqStart.X);
-            int h = Math.Abs(_marqCur.Y - _marqStart.Y);
-            var r = new Rectangle(x, y, w, h);
-            using (var b = new SolidBrush(Color.FromArgb(80, Th.SelFill))) g.FillRectangle(b, r);
-            using (var p = new Pen(Th.SelBorder)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
+            int x = Math.Min(_marqStart.X, _marqCur.X), y = Math.Min(_marqStart.Y, _marqCur.Y);
+            int w = Math.Abs(_marqCur.X - _marqStart.X), h = Math.Abs(_marqCur.Y - _marqStart.Y);
+            using (var b = new SolidBrush(Color.FromArgb(80, Th.SelFill))) g.FillRectangle(b, x, y, w, h);
+            using (var p = new Pen(Th.SelBorder)) g.DrawRectangle(p, x, y, w - 1, h - 1);
         }
  
-        // -- Mouse handling -------------------------------------------------
+        // ── Mouse ──────────────────────────────────────────────────────────────
         void OnMD(object s, MouseEventArgs e)
         {
             Focus();
  
-            // Column header click?
             if (e.Y < HDR_H)
             {
-                HandleHeaderClick(e);
+                // Start column resize drag?
+                if (e.Button == MouseButtons.Left && NearDivider(e.X, out int bnd))
+                {
+                    _hdrDrag = true; _hdrDragBnd = bnd;
+                    _hdrDragStartX = e.X; _hdrDragStartW = GetDivStartWidth(bnd);
+                    Capture = true;
+                    return;
+                }
+                // Sort click
+                if (e.Button == MouseButtons.Left) HandleHeaderSortClick(e.X);
                 return;
             }
  
@@ -1504,33 +1423,16 @@ namespace WinExplorer
                 if (idx >= 0 && idx < _items.Count)
                 {
                     if (ctrl)
-                    {
-                        if (_selSet.Contains(idx)) _selSet.Remove(idx);
-                        else _selSet.Add(idx);
-                        _lastSel = idx;
-                    }
+                    { if (_selSet.Contains(idx)) _selSet.Remove(idx); else _selSet.Add(idx); _lastSel = idx; }
                     else if (shift && _lastSel >= 0)
-                    {
-                        _selSet.Clear();
-                        int lo = Math.Min(_lastSel, idx), hi = Math.Max(_lastSel, idx);
-                        for (int i = lo; i <= hi; i++) _selSet.Add(i);
-                    }
+                    { _selSet.Clear(); for (int i = Math.Min(_lastSel,idx); i <= Math.Max(_lastSel,idx); i++) _selSet.Add(i); }
                     else
-                    {
-                        _selSet.Clear();
-                        _selSet.Add(idx);
-                        _lastSel = idx;
-                    }
+                    { _selSet.Clear(); _selSet.Add(idx); _lastSel = idx; }
                 }
                 else
                 {
-                    // Clicked empty area � start marquee
                     if (!ctrl && !shift) _selSet.Clear();
-                    _lastSel  = -1;
-                    _marquee  = true;
-                    _marqStart = e.Location;
-                    _marqCur   = e.Location;
-                    Capture    = true;
+                    _lastSel = -1; _marquee = true; _marqStart = _marqCur = e.Location; Capture = true;
                 }
             }
             else if (e.Button == MouseButtons.Right)
@@ -1538,381 +1440,309 @@ namespace WinExplorer
                 if (idx >= 0 && idx < _items.Count)
                 {
                     if (!_selSet.Contains(idx)) { _selSet.Clear(); _selSet.Add(idx); _lastSel = idx; }
-                    var item = _items[idx];
-                    var menu = item.IsDirectory ? _folderMenu : _fileMenu;
                     Invalidate();
-                    menu.Show(this, e.Location);
+                    ((_items[idx].IsDirectory ? _folderMenu : _fileMenu)).Show(this, e.Location);
                 }
-                else
-                {
-                    Invalidate();
-                    _bgMenu.Show(this, e.Location);
-                }
+                else { Invalidate(); _bgMenu.Show(this, e.Location); }
             }
- 
             Invalidate();
         }
  
         void OnMM(object s, MouseEventArgs e)
         {
+            // Column resize drag
+            if (_hdrDrag)
+            {
+                SetDivWidth(_hdrDragBnd, _hdrDragStartW + e.X - _hdrDragStartX);
+                Invalidate(); return;
+            }
             if (_marquee)
             {
-                _marqCur = e.Location;
-                // Update selection based on marquee
-                UpdateMarqueeSelection();
-                Invalidate();
-                return;
+                _marqCur = e.Location; UpdateMarquee(); Invalidate(); return;
             }
  
-            int idx = e.Y < HDR_H ? -1 : RowAt(e.Y);
-            if (idx != _hovRow) { _hovRow = idx; Invalidate(); }
+            if (e.Y < HDR_H)
+            {
+                // Show resize cursor near dividers
+                Cursor = NearDivider(e.X, out _) ? Cursors.VSplit : Cursors.Default;
+ 
+                int col = ColAtX(e.X);
+                if (col != _hdrHovCol) { _hdrHovCol = col; Invalidate(); }
+                if (_hovRow != -1)     { _hovRow = -1; Invalidate(); }
+            }
+            else
+            {
+                if (Cursor != Cursors.Default) Cursor = Cursors.Default;
+                if (_hdrHovCol != -1) { _hdrHovCol = -1; Invalidate(); }
+                int row = RowAt(e.Y);
+                if (row != _hovRow) { _hovRow = row; Invalidate(); }
+            }
         }
  
         void OnMU(object s, MouseEventArgs e)
         {
-            if (_marquee) { _marquee = false; Capture = false; Invalidate(); }
-        }
- 
-        void UpdateMarqueeSelection()
-        {
-            int listW = ListWidth();
-            int x1 = Math.Min(_marqStart.X, _marqCur.X);
-            int y1 = Math.Min(_marqStart.Y, _marqCur.Y);
-            int x2 = Math.Max(_marqStart.X, _marqCur.X);
-            int y2 = Math.Max(_marqStart.Y, _marqCur.Y);
- 
-            _selSet.Clear();
-            for (int i = 0; i < _items.Count; i++)
-            {
-                int ry1 = HDR_H + i * ROW_H - _scrollY;
-                int ry2 = ry1 + ROW_H;
-                if (ry2 > y1 && ry1 < y2) _selSet.Add(i);
-            }
+            if (_hdrDrag)   { _hdrDrag = false; Capture = false; Cursor = Cursors.Default; }
+            if (_marquee)   { _marquee = false; Capture = false; Invalidate(); }
         }
  
         void OnMW(object s, MouseEventArgs e)
         {
-            _scrollY = Math.Max(0, _scrollY - e.Delta / 3);
-            if (_vsb.Visible)
-            {
-                _scrollY = Math.Min(_scrollY, _vsb.Maximum - _vsb.LargeChange + 1);
-                _vsb.Value = _scrollY;
-            }
+            int total = _items.Count * ROW_H, vis = Math.Max(1, ClientSize.Height - HDR_H);
+            _scrollY = Math.Max(0, Math.Min(_scrollY - e.Delta / 3, Math.Max(0, total - vis)));
+            if (_vsb.Visible) _vsb.Value = Math.Min(_scrollY, _vsb.Maximum);
             Invalidate();
         }
  
         void OnDblClick(object s, EventArgs e)
         {
-            var mp = PointToClient(Cursor.Position);
+            var mp  = PointToClient(Cursor.Position);
             int idx = RowAt(mp.Y);
-            if (idx >= 0 && idx < _items.Count)
-                ItemActivated?.Invoke(_items[idx]);
+            if (idx >= 0 && idx < _items.Count) ItemActivated?.Invoke(_items[idx]);
         }
  
-        void HandleHeaderClick(MouseEventArgs e)
+        void UpdateMarquee()
         {
-            var cols = ColDefs();
-            foreach (var (x, _, col, w) in cols)
+            int x1 = Math.Min(_marqStart.X, _marqCur.X), y1 = Math.Min(_marqStart.Y, _marqCur.Y);
+            int x2 = Math.Max(_marqStart.X, _marqCur.X), y2 = Math.Max(_marqStart.Y, _marqCur.Y);
+            _selSet.Clear();
+            for (int i = 0; i < _items.Count; i++)
             {
-                if (e.X >= x && e.X < x + w)
+                int ry1 = HDR_H + i * ROW_H - _scrollY, ry2 = ry1 + ROW_H;
+                if (ry2 > y1 && ry1 < y2) _selSet.Add(i);
+            }
+        }
+ 
+        void HandleHeaderSortClick(int mouseX)
+        {
+            foreach (var (x, _, col, w) in ColDefs())
+            {
+                if (mouseX >= x && mouseX < x + w)
                 {
                     if (_sortCol == col) _sortDir = _sortDir == SortDir.Asc ? SortDir.Desc : SortDir.Asc;
                     else { _sortCol = col; _sortDir = SortDir.Asc; }
-                    SortItems();
-                    _selSet.Clear();
-                    Invalidate();
-                    return;
+                    _selSet.Clear(); SortItems(); Invalidate(); return;
                 }
             }
         }
  
-        int RowAt(int y)
-        {
-            if (y < HDR_H) return -1;
-            return (_scrollY + y - HDR_H) / ROW_H;
-        }
+        int RowAt(int y) => y < HDR_H ? -1 : (_scrollY + y - HDR_H) / ROW_H;
  
-        int ListWidth() => Width - (_vsb.Visible ? _vsb.Width : 0);
- 
-        // -- Context Menus -------------------------------------------------
+        // ── Context Menus (no icons; image-margin gives spacing) ───────────────
         void BuildContextMenus()
         {
-            var rend = new ExplorerMenuRenderer();
+            // ── Background menu ──────────────────────────────────────────────
+            _bgMenu = MenuHelper.NewMenu();
  
-            // Background (empty area) context menu
-            _bgMenu = new ContextMenuStrip { Renderer = rend };
-            var viewSub  = Sub("View");
-            AddViewItems(viewSub);
-            var sortSub  = Sub("Sort by");
-            AddSortItems(sortSub);
-            var groupSub = Sub("Group by");
-            AddGroupItems(groupSub);
-            var giveSub  = Sub("Give access to");
-            AddGiveAccessItems(giveSub);
-            var newSub   = Sub("New");
-            AddNewItems(newSub);
+            var viewSub  = MenuHelper.Sub("View");     AddViewSub(viewSub);
+            var sortSub  = MenuHelper.Sub("Sort by");  AddSortSub(sortSub);
+            var groupSub = MenuHelper.Sub("Group by"); AddGroupSub(groupSub);
+            var giveSub  = MenuHelper.Sub("Give access to"); AddGiveAccessSub(giveSub);
+            var newSub   = MenuHelper.Sub("New");      AddNewSub(newSub);
  
             _bgMenu.Items.AddRange(new ToolStripItem[]
             {
-                viewSub,
-                sortSub,
-                groupSub,
-                MItem("Refresh",           "reload"),
+                viewSub, sortSub, groupSub,
+                MenuHelper.Item("Refresh"),
                 new ToolStripSeparator(),
-                MItem("Paste",             "file"),
-                MItem("Paste shortcut",    "file"),
-                MItem("Undo Delete",       "backward_arrow"),
+                MenuHelper.Item("Paste"),
+                MenuHelper.Item("Paste shortcut"),
+                MenuHelper.Item("Undo Delete"),
                 new ToolStripSeparator(),
                 giveSub,
                 new ToolStripSeparator(),
                 newSub,
                 new ToolStripSeparator(),
-                MItem("Properties",        "organize"),
+                MenuHelper.Item("Properties"),
             });
  
-            // Folder context menu
-            _folderMenu = new ContextMenuStrip { Renderer = rend };
-            var folderGiveSub = Sub("Give access to");
-            AddGiveAccessItems(folderGiveSub);
-            var folderSendSub = Sub("Send to");
+            // ── Folder menu ───────────────────────────────────────────────────
+            _folderMenu = MenuHelper.NewMenu();
+            var fGive = MenuHelper.Sub("Give access to"); AddGiveAccessSub(fGive);
+            var fSend = MenuHelper.Sub("Send to");
+ 
             _folderMenu.Items.AddRange(new ToolStripItem[]
             {
-                MItem("Open",              "folder"),
-                MItem("Open in new window","folder"),
-                MItem("Pin to Quick access", "quick_access"),
-                MItem("Take Ownership",    "organize"),
+                MenuHelper.Item("Open"),
+                MenuHelper.Item("Open in new window"),
+                MenuHelper.Item("Pin to Quick access"),
+                MenuHelper.Item("Take Ownership"),
                 new ToolStripSeparator(),
-                folderGiveSub,
-                MItem("Restore",           "backward_arrow"),
+                fGive,
+                MenuHelper.Item("Restore"),
                 new ToolStripSeparator(),
-                folderSendSub,
+                fSend,
                 new ToolStripSeparator(),
-                MItem("Cut",               "file"),
-                MItem("Copy",              "file"),
+                MenuHelper.Item("Cut"),
+                MenuHelper.Item("Copy"),
                 new ToolStripSeparator(),
-                MItem("Create shortcut",   "file"),
-                MItem("Delete",            "file"),
-                MItem("Rename",            "file"),
+                MenuHelper.Item("Create shortcut"),
+                MenuHelper.Item("Delete"),
+                MenuHelper.Item("Rename"),
                 new ToolStripSeparator(),
-                MItem("Properties",        "organize"),
+                MenuHelper.Item("Properties"),
             });
  
-            // File context menu
-            _fileMenu = new ContextMenuStrip { Renderer = rend };
-            var fileGiveSub = Sub("Give access to");
-            AddGiveAccessItems(fileGiveSub);
-            var fileOpenWith = Sub("Open with");
-            var fileSendTo  = Sub("Send to");
+            // ── File menu ─────────────────────────────────────────────────────
+            _fileMenu = MenuHelper.NewMenu();
+            var fiGive    = MenuHelper.Sub("Give access to"); AddGiveAccessSub(fiGive);
+            var fiOpenWith = MenuHelper.Sub("Open with");
+            var fiSend    = MenuHelper.Sub("Send to");
+ 
             _fileMenu.Items.AddRange(new ToolStripItem[]
             {
-                MItem("Open",                   "file"),
-                MItem("Pin",                    "quick_access"),
-                MItem("Edit",                   "file"),
-                MItem("Take Ownership",         "organize"),
-                fileOpenWith,
+                MenuHelper.Item("Open"),
+                MenuHelper.Item("Pin"),
+                MenuHelper.Item("Edit"),
+                MenuHelper.Item("Take Ownership"),
+                fiOpenWith,
                 new ToolStripSeparator(),
-                fileGiveSub,
-                MItem("Restore previous version","backward_arrow"),
+                fiGive,
+                MenuHelper.Item("Restore previous version"),
                 new ToolStripSeparator(),
-                fileSendTo,
-                MItem("Cut",                    "file"),
-                MItem("Copy",                   "file"),
+                fiSend,
+                MenuHelper.Item("Cut"),
+                MenuHelper.Item("Copy"),
                 new ToolStripSeparator(),
-                MItem("Create shortcut",        "file"),
-                MItem("Delete",                 "file"),
-                MItem("Rename",                 "file"),
+                MenuHelper.Item("Create shortcut"),
+                MenuHelper.Item("Delete"),
+                MenuHelper.Item("Rename"),
                 new ToolStripSeparator(),
-                MItem("Properties",             "organize"),
+                MenuHelper.Item("Properties"),
             });
         }
  
-        static ToolStripMenuItem Sub(string text)
+        static void AddViewSub(ToolStripMenuItem m)
         {
-            var m = new ToolStripMenuItem(text) { Font = Th.UiFont };
-            return m;
+            foreach (var s in new[] { "Extra Large Icons","Large Icons","Medium Icons","Small Icons","List","Details","Tiles","Content" })
+                m.DropDownItems.Add(MenuHelper.Item(s));
         }
- 
-        static ToolStripMenuItem MItem(string text, string icon)
+        static void AddSortSub(ToolStripMenuItem m)
         {
-            var m = new ToolStripMenuItem(text) { Font = Th.UiFont };
-            if (icon != null)
-            {
-                var src = Icons.Get(icon);
-                var bmp = new Bitmap(16, 16);
-                using (var g = Graphics.FromImage(bmp))
-                { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(src, 0, 0, 16, 16); }
-                m.Image = bmp;
-            }
-            return m;
+            m.DropDownItems.Add(MenuHelper.Item("Name"));
+            m.DropDownItems.Add(MenuHelper.Item("Date modified"));
+            m.DropDownItems.Add(MenuHelper.Item("Type"));
+            m.DropDownItems.Add(MenuHelper.Item("Size"));
+            m.DropDownItems.Add(new ToolStripSeparator());
+            m.DropDownItems.Add(MenuHelper.Item("Ascending"));
+            m.DropDownItems.Add(MenuHelper.Item("Descending"));
+            m.DropDownItems.Add(new ToolStripSeparator());
+            m.DropDownItems.Add(MenuHelper.Item("More..."));
         }
- 
-        static void AddViewItems(ToolStripMenuItem sub)
+        static void AddGroupSub(ToolStripMenuItem m)
         {
-            string[] labels = { "Extra Large Icons", "Large Icons", "Medium Icons", "Small Icons",
-                                 "List", "Details", "Tiles", "Content" };
-            foreach (var l in labels) sub.DropDownItems.Add(MItem(l, "change_view"));
+            m.DropDownItems.Add(MenuHelper.Item("Name"));
+            m.DropDownItems.Add(MenuHelper.Item("Date modified"));
+            m.DropDownItems.Add(MenuHelper.Item("Type"));
+            m.DropDownItems.Add(MenuHelper.Item("Size"));
+            m.DropDownItems.Add(new ToolStripSeparator());
+            m.DropDownItems.Add(MenuHelper.Item("Ascending"));
+            m.DropDownItems.Add(MenuHelper.Item("Descending"));
+            m.DropDownItems.Add(new ToolStripSeparator());
+            m.DropDownItems.Add(MenuHelper.Item("More..."));
         }
- 
-        static void AddSortItems(ToolStripMenuItem sub)
+        static void AddGiveAccessSub(ToolStripMenuItem m)
         {
-            sub.DropDownItems.AddRange(new ToolStripItem[]
-            {
-                MItem("Name",       null), MItem("Date modified", null),
-                MItem("Type",       null), MItem("Size",          null),
-                new ToolStripSeparator(),
-                MItem("Ascending",  null), MItem("Descending",    null),
-                new ToolStripSeparator(),
-                MItem("More...",    null),
-            });
+            m.DropDownItems.Add(MenuHelper.Item("Remove access"));
+            m.DropDownItems.Add(MenuHelper.Item("Homegroup (view)"));
+            m.DropDownItems.Add(MenuHelper.Item("Homegroup (view and edit)"));
+            m.DropDownItems.Add(new ToolStripSeparator());
+            m.DropDownItems.Add(MenuHelper.Item("Specific people..."));
         }
- 
-        static void AddGroupItems(ToolStripMenuItem sub)
+        static void AddNewSub(ToolStripMenuItem m)
         {
-            sub.DropDownItems.AddRange(new ToolStripItem[]
-            {
-                MItem("Name",       null), MItem("Date modified", null),
-                MItem("Type",       null), MItem("Size",          null),
-                new ToolStripSeparator(),
-                MItem("Ascending",  null), MItem("Descending",    null),
-                new ToolStripSeparator(),
-                MItem("More...",    null),
-            });
-        }
- 
-        static void AddGiveAccessItems(ToolStripMenuItem sub)
-        {
-            sub.DropDownItems.AddRange(new ToolStripItem[]
-            {
-                MItem("Remove access",               null),
-                MItem("Homegroup (view)",             "network"),
-                MItem("Homegroup (view and edit)",    "network"),
-                new ToolStripSeparator(),
-                MItem("Specific people...",           null),
-            });
-        }
- 
-        static void AddNewItems(ToolStripMenuItem sub)
-        {
-            sub.DropDownItems.AddRange(new ToolStripItem[]
-            {
-                MItem("Folder",             "folder"),
-                MItem("Shortcut",           "file"),
-                new ToolStripSeparator(),
-                MItem("Bitmap image",       "file"),
-                MItem("Contact",            "file"),
-                MItem("Rich Text Format",   "file"),
-                MItem("Text Document",      "file"),
-            });
+            m.DropDownItems.Add(MenuHelper.Item("Folder"));
+            m.DropDownItems.Add(MenuHelper.Item("Shortcut"));
+            m.DropDownItems.Add(new ToolStripSeparator());
+            m.DropDownItems.Add(MenuHelper.Item("Bitmap image"));
+            m.DropDownItems.Add(MenuHelper.Item("Contact"));
+            m.DropDownItems.Add(MenuHelper.Item("Rich Text Format"));
+            m.DropDownItems.Add(MenuHelper.Item("Text Document"));
         }
     }
  
-    // --------------------------------------------------------------------------
-    //  CUSTOM SPLITTER
-    //  Thin 4px vertical divider between tree and content; draggable
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  SPLITTER BAR  (4 px draggable divider)
+    // ──────────────────────────────────────────────────────────────────────────
     class SplitterBar : Control
     {
-        bool _drag;
-        int  _startX, _startW;
-        Control _leftCtrl;
+        bool _drag; int _startX, _startW; Control _left;
  
         public SplitterBar(Control leftPanel)
         {
-            _leftCtrl = leftPanel;
-            Width     = 4;
-            Cursor    = Cursors.VSplit;
+            _left  = leftPanel;
+            Width  = 4;
+            Cursor = Cursors.VSplit;
             BackColor = Th.PaneSep;
  
             MouseDown += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
-                { _drag = true; _startX = Cursor.Position.X; _startW = _leftCtrl.Width; Capture = true; }
+                { _drag = true; _startX = Cursor.Position.X; _startW = _left.Width; Capture = true; }
             };
             MouseMove += (s, e) =>
             {
                 if (!_drag) return;
-                int newW = Math.Max(100, _startW + Cursor.Position.X - _startX);
-                _leftCtrl.Width = newW;
-                if (Parent != null) Parent.PerformLayout();
+                _left.Width = Math.Max(100, _startW + Cursor.Position.X - _startX);
+                Parent?.PerformLayout();
             };
             MouseUp += (s, e) => { _drag = false; Capture = false; };
         }
  
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.Clear(Th.PaneSep);
-        }
+        protected override void OnPaint(PaintEventArgs e) => e.Graphics.Clear(Th.PaneSep);
     }
  
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     //  STATUS BAR
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
     class ExplorerStatusBar : Panel
     {
-        Label _label;
+        Label _lbl;
+ 
+        public new string Text { get => _lbl.Text; set => _lbl.Text = value; }
  
         public ExplorerStatusBar()
         {
-            Height = 22;
-            Dock   = DockStyle.Bottom;
-            BackColor = Th.Bg;
- 
-            _label = new Label
-            {
-                AutoSize = false,
-                Dock     = DockStyle.Fill,
-                TextAlign= ContentAlignment.MiddleLeft,
-                Font     = Th.UiFont,
-                Padding  = new Padding(6, 0, 0, 0),
-            };
-            Controls.Add(_label);
-        }
- 
-        public string Text
-        {
-            get => _label.Text;
-            set => _label.Text = value;
+            Height = 22; Dock = DockStyle.Bottom; BackColor = Th.Bg;
+            _lbl = new Label { Dock = DockStyle.Fill, AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft, Font = Th.UiFont,
+                Padding = new Padding(6, 0, 0, 0) };
+            Controls.Add(_lbl);
         }
  
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using (var p = new Pen(Th.PaneSep))
-                e.Graphics.DrawLine(p, 0, 0, Width, 0);
+            using (var p = new Pen(Th.PaneSep)) e.Graphics.DrawLine(p, 0, 0, Width, 0);
         }
     }
  
-    // --------------------------------------------------------------------------
-    //  MAIN EXPLORER FORM
-    // --------------------------------------------------------------------------
+    // ──────────────────────────────────────────────────────────────────────────
+    //  MAIN FORM
+    // ──────────────────────────────────────────────────────────────────────────
     class ExplorerForm : Form
     {
-        TopNavBar        _nav;
-        CommandBar       _cmd;
-        TreePane         _tree;
-        ContentPane      _content;
-        SplitterBar      _splitter;
+        TopNavBar         _nav;
+        CommandBar        _cmd;
+        TreePane          _tree;
+        ContentPane       _content;
+        SplitterBar       _splitter;
         ExplorerStatusBar _status;
-        Panel            _mainArea;
+        Panel             _mainArea;
  
-        // Navigation history
-        List<string> _history    = new List<string>();
-        int          _historyIdx = -1;
+        List<string> _history = new List<string>();
+        int          _histIdx = -1;
  
         public ExplorerForm()
         {
-            Text           = "File Explorer";
-            MinimumSize    = new Size(700, 450);
-            Size           = new Size(1100, 680);
-            StartPosition  = FormStartPosition.CenterScreen;
-            BackColor      = Th.Bg;
-            Icon           = CreateAppIcon();
-            Font           = Th.UiFont;
+            Text          = "File Explorer";
+            MinimumSize   = new Size(700, 450);
+            Size          = new Size(1100, 680);
+            StartPosition = FormStartPosition.CenterScreen;
+            BackColor     = Th.Bg;
+            Font          = Th.UiFont;
  
             BuildLayout();
             WireEvents();
- 
-            // Open Quick Access on start
             Navigate("Quick access");
         }
  
@@ -1920,16 +1750,14 @@ namespace WinExplorer
         {
             SuspendLayout();
  
-            _nav    = new TopNavBar();
-            _cmd    = new CommandBar();
-            _status = new ExplorerStatusBar();
- 
-            // Main area (tree + splitter + content)
+            _nav     = new TopNavBar();
+            _cmd     = new CommandBar();
+            _status  = new ExplorerStatusBar();
             _mainArea = new Panel { Dock = DockStyle.Fill };
  
-            _tree    = new TreePane  { Dock = DockStyle.Left, Width = 220 };
-            _content = new ContentPane { Dock = DockStyle.Fill };
+            _tree     = new TreePane   { Dock = DockStyle.Left, Width = 220 };
             _splitter = new SplitterBar(_tree) { Dock = DockStyle.Left };
+            _content  = new ContentPane { Dock = DockStyle.Fill };
  
             _mainArea.Controls.Add(_content);
             _mainArea.Controls.Add(_splitter);
@@ -1945,140 +1773,82 @@ namespace WinExplorer
  
         void WireEvents()
         {
-            // Navigation bar events
-            _nav.BackClick    += (s, e) => GoBack();
-            _nav.ForwardClick += (s, e) => GoForward();
-            _nav.UpClick      += (s, e) => GoUp();
-            _nav.Navigate     += path => Navigate(path);
-            _nav.SearchChanged += q => _status.Text = string.IsNullOrEmpty(q) ? "" : $"Search: {q}";
+            _nav.BackClick     += (s, e) => GoBack();
+            _nav.ForwardClick  += (s, e) => GoForward();
+            _nav.UpClick       += (s, e) => GoUp();
+            _nav.Navigate      += path  => Navigate(path);
+            _nav.SearchChanged += q     => _status.Text = string.IsNullOrEmpty(q) ? "" : $"Search: {q}";
  
-            // Command bar events
-            _cmd.NewFolderClick    += (s, e) => NewFolder();
-            _cmd.HelpClick         += (s, e) => OpenHelp();
-            _cmd.PreviewPaneClick  += (s, e) => TogglePreview();
-            _cmd.ViewChanged       += vm => _status.Text = $"View: {vm}";
+            _cmd.NewFolderClick   += (s, e) => NewFolder();
+            _cmd.HelpClick        += (s, e) => OpenHelp();
+            _cmd.PreviewPaneClick += (s, e) => _status.Text = "Preview pane toggled";
+            _cmd.ViewChanged      += vm    => _status.Text  = $"View: {vm}";
  
-            // Tree events
             _tree.NodeSelected += node =>
             {
-                string path = node.Path;
-                if (path != null && Directory.Exists(path))
-                    NavigateContent(path);
-                else
-                    _status.Text = node.Label;
+                if (node.Path != null && Directory.Exists(node.Path)) Navigate(node.Path);
+                else _status.Text = node.Label;
             };
  
-            // Content events
             _content.ItemActivated += item =>
             {
-                if (item.IsDirectory)
-                    Navigate(item.FullPath);
-                else
-                    OpenFile(item.FullPath);
+                if (item.IsDirectory) Navigate(item.FullPath);
+                else OpenFile(item.FullPath);
             };
         }
  
-        // -- Navigation helpers ---------------------------------------------
+        // ── Navigation ────────────────────────────────────────────────────────
         void Navigate(string path)
         {
-            // Trim history forward if we navigated back
-            if (_historyIdx < _history.Count - 1)
-                _history.RemoveRange(_historyIdx + 1, _history.Count - _historyIdx - 1);
- 
-            _history.Add(path);
-            _historyIdx = _history.Count - 1;
- 
-            ApplyNavigation(path);
+            if (_histIdx < _history.Count - 1)
+                _history.RemoveRange(_histIdx + 1, _history.Count - _histIdx - 1);
+            _history.Add(path); _histIdx = _history.Count - 1;
+            ApplyNav(path);
         }
  
-        void NavigateContent(string path)
-        {
-            // Navigate without updating history (called from tree clicks)
-            // Still push to history so back/forward work
-            Navigate(path);
-        }
- 
-        void ApplyNavigation(string path)
+        void ApplyNav(string path)
         {
             _nav.CurrentPath    = path;
-            _nav.BackEnabled    = _historyIdx > 0;
-            _nav.ForwardEnabled = _historyIdx < _history.Count - 1;
+            _nav.BackEnabled    = _histIdx > 0;
+            _nav.ForwardEnabled = _histIdx < _history.Count - 1;
  
             if (path == "Quick access")
             {
-                // Show pinned folders in content
-                ShowQuickAccess();
-                _tree.SelectPath(null);
+                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                _content.LoadPath(profile);
+                Text = "Quick access – File Explorer";
             }
             else if (Directory.Exists(path))
             {
                 _content.LoadPath(path);
                 _tree.SelectPath(path);
-                Text = $"{Path.GetFileName(path) ?? path} � File Explorer";
+                Text = (Path.GetFileName(path) ?? path) + " – File Explorer";
             }
- 
             UpdateStatus();
         }
  
-        void ShowQuickAccess()
-        {
-            // We don't have a dedicated method on ContentPane for virtual folders,
-            // so load the user profile folder as a representative default.
-            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            _content.LoadPath(profile);
-            Text = "Quick access � File Explorer";
-        }
- 
-        void GoBack()
-        {
-            if (_historyIdx > 0)
-            {
-                _historyIdx--;
-                ApplyNavigation(_history[_historyIdx]);
-            }
-        }
- 
-        void GoForward()
-        {
-            if (_historyIdx < _history.Count - 1)
-            {
-                _historyIdx++;
-                ApplyNavigation(_history[_historyIdx]);
-            }
-        }
- 
+        void GoBack()    { if (_histIdx > 0) { _histIdx--; ApplyNav(_history[_histIdx]); } }
+        void GoForward() { if (_histIdx < _history.Count - 1) { _histIdx++; ApplyNav(_history[_histIdx]); } }
         void GoUp()
         {
             string cur = _nav.CurrentPath;
             if (string.IsNullOrEmpty(cur) || cur == "Quick access") return;
- 
-            string parent = null;
-            try { parent = Directory.GetParent(cur)?.FullName; } catch { }
- 
-            if (parent != null) Navigate(parent);
+            try { string p = Directory.GetParent(cur)?.FullName; if (p != null) Navigate(p); } catch { }
         }
  
-        // -- Actions --------------------------------------------------------
+        // ── Actions ───────────────────────────────────────────────────────────
         void NewFolder()
         {
             string cur = _content.CurrentPath;
             if (!Directory.Exists(cur)) return;
-            string newPath = Path.Combine(cur, "New folder");
-            int i = 2;
-            while (Directory.Exists(newPath)) newPath = Path.Combine(cur, $"New folder ({i++})");
-            try
-            {
-                Directory.CreateDirectory(newPath);
-                _content.LoadPath(cur);
-                _status.Text = $"Created: {newPath}";
-            }
+            string p = Path.Combine(cur, "New folder"); int i = 2;
+            while (Directory.Exists(p)) p = Path.Combine(cur, $"New folder ({i++})");
+            try { Directory.CreateDirectory(p); _content.LoadPath(cur); _status.Text = $"Created: {p}"; }
             catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
  
         void OpenHelp() =>
             Process.Start(new ProcessStartInfo("https://go.microsoft.com/fwlink/?LinkID=2004439") { UseShellExecute = true });
- 
-        void TogglePreview() => _status.Text = "Preview pane toggled.";
  
         void OpenFile(string path)
         {
@@ -2093,60 +1863,16 @@ namespace WinExplorer
             if (!Directory.Exists(path)) { _status.Text = path; return; }
             try
             {
-                int dirs  = Directory.GetDirectories(path).Length;
-                int files = Directory.GetFiles(path).Length;
-                _status.Text = $"{dirs + files} items";
+                int total = Directory.GetDirectories(path).Length + Directory.GetFiles(path).Length;
+                _status.Text = $"{total} item{(total != 1 ? "s" : "")}";
             }
             catch { _status.Text = path; }
-        }
- 
-        // Simple icon generated at runtime (48�48)
-        static Icon CreateAppIcon()
-        {
-            var bmp = new Bitmap(32, 32);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.Clear(Color.Transparent);
-                // Folder shape
-                using (var b = new SolidBrush(Color.FromArgb(255, 186, 0)))
-                { g.FillRectangle(b, 2, 10, 28, 18); g.FillRectangle(b, 2, 7, 12, 5); }
-                using (var p = new Pen(Color.FromArgb(200, 150, 0), 1.5f))
-                { g.DrawRectangle(p, 2, 10, 27, 17); g.DrawRectangle(p, 2, 7, 11, 4); }
-            }
-            using (var ms = new MemoryStream())
-            {
-                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                bmp.Dispose();
-                // Minimal ICO wrapper
-                byte[] png  = ms.ToArray();
-                using (var ico = new MemoryStream())
-                {
-                    // ICO header
-                    ico.Write(new byte[] { 0, 0, 1, 0, 1, 0 }, 0, 6);
-                    ico.Write(new byte[] { 32, 32, 0, 0, 1, 0, 32, 0 }, 0, 8);
-                    int dataOffset = 6 + 16;
-                    byte[] dataOffsetBytes = BitConverter.GetBytes(dataOffset);
-                    ico.Write(dataOffsetBytes, 0, 4);
-                    // Actually, embedding PNG in ICO for simplicity is not standard
-                    // Return null and fall back to no icon
-                    return null;
-                }
-            }
-        }
- 
-        protected override void OnLoad(EventArgs e)
-        {
-            base.OnLoad(e);
-            // Ensure toolbar layout is computed after form is shown
-            _nav.Invalidate();
-            _cmd.Invalidate();
         }
  
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-            if (e.KeyCode == Keys.Back || (e.Alt && e.KeyCode == Keys.Left))  GoBack();
+            if      (e.KeyCode == Keys.Back || (e.Alt && e.KeyCode == Keys.Left))  GoBack();
             else if (e.Alt && e.KeyCode == Keys.Right) GoForward();
             else if (e.Alt && e.KeyCode == Keys.Up)    GoUp();
             else if (e.KeyCode == Keys.F5)             _content.LoadPath(_content.CurrentPath);
