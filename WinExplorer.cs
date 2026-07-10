@@ -410,13 +410,13 @@ namespace WinExplorer
     class TopNavBar:Panel
     {
         public const int H=34; const int BTN_H=22,BTN_Y=6,ICO=16,SM=14;
-        enum Hit{None,Back,Fwd,RecLoc,Up,RecFold}
-        Hit _hov,_prs; Rectangle _rBack,_rFwd,_rRL,_rUp,_rRF;
+        enum Hit{None,Back,Fwd,RecLoc,Up,Reload,RecFold}
+        Hit _hov,_prs; Rectangle _rBack,_rFwd,_rRL,_rUp,_rReload,_rRF;
         TextBox _path; Panel _srchWrap; TextBox _srch; bool _backOn,_fwdOn;
         public string CurrentPath{get=>_path.Text;set=>_path.Text=value;}
         public bool BackEnabled{set{_backOn=value;Invalidate();}}
         public bool ForwardEnabled{set{_fwdOn=value;Invalidate();}}
-        public event EventHandler BackClick,ForwardClick,UpClick;
+        public event EventHandler BackClick,ForwardClick,UpClick,ReloadClick;
         public event Action<string> Navigate,SearchChanged;
  
         public TopNavBar()
@@ -445,7 +445,8 @@ namespace WinExplorer
             _rBack=new Rectangle(x,BTN_Y,28,BTN_H);x+=28;
             _rFwd=new Rectangle(x,BTN_Y,28,BTN_H);x+=28;
             _rRL=new Rectangle(x,BTN_Y,SM,BTN_H);x+=SM+2;
-            _rUp=new Rectangle(x,BTN_Y,28,BTN_H);x+=28+2;
+            _rUp=new Rectangle(x,BTN_Y,28,BTN_H);x+=28+4;
+            _rReload=new Rectangle(x,BTN_Y,28,BTN_H);x+=28+4;
             const int sw=202,gap=12,rfw=SM;
             int pw=Math.Max(60,Width-gap-sw-gap-rfw-2-x-1);
             _path.SetBounds(x+3,BTN_Y+3,pw-6,BTN_H-6); x+=pw+2;
@@ -459,6 +460,7 @@ namespace WinExplorer
             using(var p=new Pen(Color.FromArgb(220,220,220)))g.DrawLine(p,0,H-1,Width,H-1);
             DrawNB(g,_rBack,"backward_arrow",_backOn,Hit.Back); DrawNB(g,_rFwd,"forward_arrow",_fwdOn,Hit.Fwd);
             DrawAB(g,_rRL,Hit.RecLoc); DrawNB(g,_rUp,"up_arrow",true,Hit.Up);
+            DrawNB(g,_rReload,"reload",true,Hit.Reload);
             int px=_path.Left-3,py=BTN_Y,pw=_path.Width+6;
             using(var p=new Pen(Th.PaneSep))g.DrawRectangle(p,px,py,pw-1,BTN_H-1);
             DrawAB(g,_rRF,Hit.RecFold);
@@ -551,7 +553,7 @@ namespace WinExplorer
             // Text centred; reserve right margin only when there's a drop arrow
             int rightReserve=arr?14:0;
             using(var sf=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter})
-                g.DrawString(t,Th.UiFont,Brushes.Black,new RectangleF(r.X,r.Y,r.Width-rightReserve,r.Height),sf);
+                g.DrawString(t,Th.UiFont,new SolidBrush(Color.FromArgb(0,102,204)),new RectangleF(r.X,r.Y,r.Width-rightReserve,r.Height),sf);
             if(arr)Th.DropArr(g,r.Right-8,r.Y+r.Height/2,Th.TxtColor);
         }
         void DrawIB(Graphics g,Rectangle r,string ico,Hit btn)
@@ -668,7 +670,7 @@ namespace WinExplorer
             var g=e.Graphics; g.TextRenderingHint=TextRenderingHint.ClearTypeGridFit; g.Clear(Th.TreeBg);
             int lw=Width-(_vsb.Visible?_vsb.Width:0)-2;
             var greyBrush=new SolidBrush(Color.FromArgb(100,100,100));
-            var sf=new StringFormat{LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter};
+            var sf=new StringFormat{LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap};
             for(int i=0;i<_flat.Count;i++)
             {
                 if(i>=_yPos.Count) break;
@@ -1081,11 +1083,10 @@ namespace WinExplorer
         static extern int mciSendString(string cmd,System.Text.StringBuilder ret,int retLen,IntPtr cb);
  
         Image _ico; string _path; bool _playing; Rectangle _pbr;
-        SoundPlayer _sp; // WAV only
+        SoundPlayer _sp;
         const string Alias="wex_aud";
-        static readonly HashSet<string> MciFormats=new HashSet<string>(StringComparer.OrdinalIgnoreCase){".mp3",".wma",".m4a",".aac"};
         static readonly HashSet<string> WavFormats=new HashSet<string>(StringComparer.OrdinalIgnoreCase){".wav"};
-        static readonly HashSet<string> ShellFormats=new HashSet<string>(StringComparer.OrdinalIgnoreCase){".ogg",".flac",".opus",".ape",".aiff",".aif"};
+        static readonly HashSet<string> MciFormats=new HashSet<string>(StringComparer.OrdinalIgnoreCase){".mp3",".wma",".m4a",".aac"};
  
         public AudioPanel(){BackColor=Color.FromArgb(245,248,255);DoubleBuffered=true;MouseClick+=OnClick;}
         public void Load(string path,Image ico)
@@ -1148,13 +1149,88 @@ namespace WinExplorer
     //  PREVIEW PANE  (360 px wide)
     //  Top 256 px: file content  |  Bottom: file info
     // ═════════════════════════════════════════════════════════════════════════
+    class VideoPanel:Panel
+    {
+        [DllImport("winmm.dll",CharSet=CharSet.Unicode)]
+        static extern int mciSendString(string cmd,System.Text.StringBuilder ret,int retLen,IntPtr hwnd);
+ 
+        string _path; bool _playing; Image _thumb; Rectangle _playBtn;
+        const string VA="wex_vid";
+ 
+        public VideoPanel(){BackColor=Color.Black;DoubleBuffered=true;MouseClick+=OnClick;Resize+=(s,e)=>{if(_playing)ResizeVideo();else Invalidate();};}
+ 
+        public void Load(string path)
+        {
+            StopVid();_path=path;_thumb=null;_playing=false;
+            if(path!=null){try{_thumb=Shell.Thumbnail(path,256);}catch{}}
+            if(_thumb==null&&path!=null)_thumb=Shell.LargeIcon(path)??Icons.Get("videos");
+            Invalidate();
+        }
+ 
+        void StopVid()
+        {
+            if(!_playing)return;
+            try{mciSendString("stop "+VA,null,0,IntPtr.Zero);}catch{}
+            try{mciSendString("close "+VA,null,0,IntPtr.Zero);}catch{}
+            _playing=false;
+        }
+ 
+        void ResizeVideo()
+        {
+            try{mciSendString("put "+VA+" window at 0 0 "+Width+" "+Height,null,0,IntPtr.Zero);}catch{}
+        }
+ 
+        void OnClick(object s,MouseEventArgs e)
+        {
+            if(_path==null)return;
+            if(_playing){StopVid();Invalidate();return;}
+            if(!_playBtn.Contains(e.Location))return;
+            // Try MCI video in this panel
+            try
+            {
+                string open="open \""+_path+"\" type mpegvideo alias "+VA;
+                int r=mciSendString(open,null,0,IntPtr.Zero);
+                if(r!=0){r=mciSendString("open \""+_path+"\" alias "+VA,null,0,IntPtr.Zero);}
+                if(r==0)
+                {
+                    mciSendString("window "+VA+" handle "+Handle.ToString(),null,0,IntPtr.Zero);
+                    mciSendString("put "+VA+" window at 0 0 "+Width+" "+Height,null,0,IntPtr.Zero);
+                    mciSendString("play "+VA,null,0,IntPtr.Zero);
+                    _playing=true; Invalidate(); return;
+                }
+            }catch{}
+            // Fallback: OS default player
+            try{Process.Start(new ProcessStartInfo(_path){UseShellExecute=true});}catch{}
+        }
+ 
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g=e.Graphics; g.Clear(Color.FromArgb(20,20,20));
+            if(!_playing&&_thumb!=null)
+            {
+                float sc=Math.Min((float)Width/_thumb.Width,(float)Height/_thumb.Height);
+                int w=(int)(_thumb.Width*sc),h=(int)(_thumb.Height*sc);
+                g.DrawImage(_thumb,(Width-w)/2,(Height-h)/2,w,h);
+            }
+            int bx=Width/2-18,by=Height-46;
+            _playBtn=new Rectangle(bx-4,by-4,44,38);
+            using(var bb=new SolidBrush(Color.FromArgb(190,0,0,0)))
+                g.FillEllipse(bb,bx,by,36,30);
+            if(!_playing)
+                g.FillPolygon(Brushes.White,new[]{new Point(bx+10,by+6),new Point(bx+10,by+24),new Point(bx+27,by+15)});
+            else
+            {g.FillRectangle(Brushes.White,bx+8,by+7,5,16);g.FillRectangle(Brushes.White,bx+19,by+7,5,16);}
+            if(!_playing){using(var fmt=new StringFormat{Alignment=StringAlignment.Center})g.DrawString("Click to play",Th.UiSmall,new SolidBrush(Color.FromArgb(180,255,255,255)),new RectangleF(0,by+36,Width,18),fmt);}
+        }
+    }
+ 
     class PreviewPane:Panel
     {
         public const int PW=360; const int TOP_H=256,TAB_H=20;
  
         Panel _top; Panel _content; Panel _info;
         Button _btnPrev,_btnHex,_btnTxt;
-        PictureBox _picBox; RichTextBox _txtBox; RichTextBox _rawTxtBox; HexPanel _hexPanel; ObjPanel _objPanel; AudioPanel _audioPanel; Label _iconLbl;
+        PictureBox _picBox; RichTextBox _txtBox; RichTextBox _rawTxtBox; HexPanel _hexPanel; ObjPanel _objPanel; AudioPanel _audioPanel; VideoPanel _vidPanel; Label _iconLbl;
         bool _showHex; Control _activePreview;
  
         Label _lbName,_lbType,_lbPath,_lbModified,_lbSize;
@@ -1163,7 +1239,7 @@ namespace WinExplorer
         {
             Width=PW;Dock=DockStyle.Right;BackColor=Th.PreviewBg;Padding=Padding.Empty;
             Build();
-            //_btnTxt.Click+=(s,e)=>ShowRawText();  // wired after Build so ShowRawText is in scope
+            _btnTxt.Click+=(s,e)=>ShowRawText();  // wired after Build so ShowRawText is in scope
         }
         void Build()
         {
@@ -1182,9 +1258,6 @@ namespace WinExplorer
             tabs.Controls.Add(_btnHex); tabs.Controls.Add(_btnTxt); tabs.Controls.Add(_btnPrev);
             _top.Controls.Add(tabs);
             // content area
-            // 20 px spacer so content never sits under tab bar
-            var spacer=new Panel{Dock=DockStyle.Top,Height=20,BackColor=Color.White};
-            _top.Controls.Add(spacer);
             _content=new Panel{Dock=DockStyle.Fill,BackColor=Color.White};
             _picBox  =new PictureBox{Dock=DockStyle.Fill,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.White,Visible=false};
             _txtBox  =new RichTextBox{Dock=DockStyle.Fill,ReadOnly=true,Font=Th.Mono,BackColor=Color.FromArgb(252,252,255),BorderStyle=BorderStyle.None,Visible=false,ScrollBars=RichTextBoxScrollBars.Vertical};
@@ -1192,8 +1265,9 @@ namespace WinExplorer
             _hexPanel=new HexPanel{Dock=DockStyle.Fill,Visible=false};
             _objPanel=new ObjPanel{Dock=DockStyle.Fill,Visible=false};
             _audioPanel=new AudioPanel{Dock=DockStyle.Fill,Visible=false};
+            _vidPanel=new VideoPanel{Dock=DockStyle.Fill,Visible=false};
             _iconLbl =new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,Font=Th.UiFont,ForeColor=Th.TxtDisabled,Text="No selection",Visible=true};
-            _content.Controls.AddRange(new Control[]{_iconLbl,_audioPanel,_objPanel,_hexPanel,_rawTxtBox,_txtBox,_picBox});
+            _content.Controls.AddRange(new Control[]{_iconLbl,_vidPanel,_audioPanel,_objPanel,_hexPanel,_rawTxtBox,_txtBox,_picBox});
             _top.Controls.Add(_content);
  
             // ── info panel ─────────────────────────────────────────────────
@@ -1229,8 +1303,15 @@ namespace WinExplorer
         void ShowCtrl(Control c)
         {
             _picBox.Visible=c==_picBox; _txtBox.Visible=c==_txtBox; _rawTxtBox.Visible=c==_rawTxtBox; _hexPanel.Visible=c==_hexPanel;
-            _objPanel.Visible=c==_objPanel; _audioPanel.Visible=c==_audioPanel;
+            _objPanel.Visible=c==_objPanel; _audioPanel.Visible=c==_audioPanel; _vidPanel.Visible=c==_vidPanel;
             _iconLbl.Visible=c==_iconLbl||c==null;
+        }
+        void ShowRawText()
+        {
+            _btnPrev.BackColor=Color.Transparent;
+            _btnTxt .BackColor=Th.SelFill;
+            _btnHex .BackColor=Color.Transparent;
+            ShowCtrl(_rawTxtBox);
         }
  
         public void ShowItem(ContentItem item)
@@ -1286,6 +1367,10 @@ namespace WinExplorer
             {
                 _objPanel.Load(item.FullPath); chosen=_objPanel;
             }
+            else if(!item.IsDirectory&&IsVideo(ext))
+            {
+                _vidPanel.Load(item.FullPath); chosen=_vidPanel;
+            }
             else if(!item.IsDirectory&&IsAudio(ext))
             {
                 var ico=Shell.LargeIcon(item.FullPath)??Icons.Get("file");
@@ -1294,13 +1379,10 @@ namespace WinExplorer
             else
             {
                 // Thumbnail from shell (images, video, etc.) or large icon
-                Image thumb=null;
-                if(item.FullPath!=null)
-                {
-                    if(IsVideo(ext))thumb=Shell.Thumbnail(item.FullPath,128);
-                    thumb=thumb??Shell.LargeIcon(item.FullPath)??Icons.Get("file");
-                }
-                _iconLbl.Image=thumb; _iconLbl.Text=thumb==null?item.Name:"";
+                // Default: stretch to 256×256 in PictureBox (fits panel)
+                Image thumb=Shell.Thumbnail(item.FullPath??string.Empty,256)??Shell.LargeIcon(item.FullPath??string.Empty);
+                if(thumb==null){string icoN=item.IsDirectory?"folder":FileIcon.Get(ext);thumb=Icons.Get(icoN);}
+                _iconLbl.Image=thumb; _iconLbl.ImageAlign=ContentAlignment.MiddleCenter; _iconLbl.Text="";
                 chosen=_iconLbl;
             }
             _activePreview=chosen;
@@ -1372,6 +1454,51 @@ namespace WinExplorer
     // ═════════════════════════════════════════════════════════════════════════
     //  CONTENT PANE  (with shell icons, inline rename, DnD, extended marquee)
     // ═════════════════════════════════════════════════════════════════════════
+    // Maps a file extension to the embedded icon name used in the UI
+    static class FileIcon
+    {
+        static readonly Dictionary<string,string> Map=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Text / code
+            {".txt","txt"},{".log","txt"},{".md","txt"},{".readme","txt"},
+            {".cs","txt"},{".cpp","txt"},{".c","txt"},{".h","txt"},
+            {".py","txt"},{".js","txt"},{".ts","txt"},{".java","txt"},
+            {".html","txt"},{".htm","txt"},{".xml","txt"},{".json","txt"},
+            {".yaml","txt"},{".yml","txt"},{".toml","txt"},{".sql","txt"},
+            // Config
+            {".ini","ini"},{".cfg","ini"},{".conf","ini"},{".env","ini"},
+            // Executable / library
+            {".exe","exe"},{".dll","dll"},{".so","dll"},{".dylib","dll"},
+            // Script
+            {".bat","bat"},{".cmd","bat"},{".sh","bat"},{".ps1","bat"},
+            // Archive
+            {".zip","zip"},{".7z","zip"},{".rar","zip"},{".tar","zip"},
+            {".gz","zip"},{".bz2","zip"},{".xz","zip"},{".zst","zip"},
+            // Audio
+            {".mp3","music"},{".wav","music"},{".flac","music"},{".ogg","music"},
+            {".aac","music"},{".m4a","music"},{".wma","music"},{".opus","music"},
+            {".ape","music"},{".aiff","music"},{".aif","music"},
+            // Video
+            {".mp4","videos"},{".avi","videos"},{".mkv","videos"},{".mov","videos"},
+            {".wmv","videos"},{".flv","videos"},{".webm","videos"},{".mpg","videos"},
+            {".mpeg","videos"},{".m4v","videos"},{".3gp","videos"},
+            // Image
+            {".png","pictures"},{".jpg","pictures"},{".jpeg","pictures"},
+            {".bmp","pictures"},{".gif","pictures"},{".tiff","pictures"},
+            {".tif","pictures"},{".webp","pictures"},{".ico","pictures"},
+            {".svg","pictures"},{".dds","pictures"},{".tga","pictures"},
+            // Office / document
+            {".pdf","file"},{".doc","documents"},{".docx","documents"},
+            {".xls","file"},{".xlsx","file"},{".ppt","file"},{".pptx","file"},
+        };
+ 
+        public static string Get(string ext)
+        {
+            if(string.IsNullOrEmpty(ext))return"file";
+            return Map.TryGetValue(ext,out var n)?n:"file";
+        }
+    }
+ 
     class ContentPane:Panel
     {
         const int HDR_H=25,ROW_H=22,ICO=16,DIV=4;
@@ -1393,6 +1520,9 @@ namespace WinExplorer
  
         public string CurrentPath{get;private set;}="";
         public event Action<ContentItem> ItemActivated;
+        // ── Search ──────────────────────────────────────────────────────────
+        string _searchQuery=""; bool _searchMode=false;
+        List<ContentItem> _allItems=new List<ContentItem>();
         public event Action<ContentItem> SelectionChanged;
         HashSet<string> _cutPaths=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
  
@@ -1413,6 +1543,7 @@ namespace WinExplorer
             MouseWheel+=OnMW; MouseLeave+=(s,e)=>{_hovRow=-1;Invalidate();};
             DoubleClick+=OnDbl;Resize+=(s,e)=>UpdateScroll();
             DragEnter+=OnDE; DragOver+=OnDOv; DragDrop+=OnDD;
+            DragLeave+=(s,e)=>{_dndHovRow=-1;Invalidate();};
             BuildMenus();
         }
  
@@ -1430,9 +1561,34 @@ namespace WinExplorer
                     try{var fi=new FileInfo(f);_items.Add(new ContentItem{Name=fi.Name,FullPath=fi.FullName,DateModified=fi.LastWriteTime,ItemType=Shell.TypeName(fi.FullName),Size=fi.Length,IsDirectory=false});}catch{}
             }
             catch{}
+            _allItems=new List<ContentItem>(_items);  // keep unfiltered copy for search
             SortItems();UpdateScroll();Invalidate();
         }
         public void SelectAll(){for(int i=0;i<_items.Count;i++)_sel.Add(i);Invalidate();}
+        public void SetSearch(string query)
+        {
+            _searchQuery=(query??string.Empty).Trim();
+            _searchMode=_searchQuery.Length>0;
+            _sel.Clear(); _lastSel=-1; _scrollY=0;
+            if(!_searchMode){_items=new List<ContentItem>(_allItems);}
+            else
+            {
+                _items=new List<ContentItem>();
+                SearchDir(CurrentPath,_searchQuery,_items,0);
+            }
+            SortItems(); UpdateScroll(); Invalidate();
+        }
+        void SearchDir(string dir,string q,List<ContentItem> out2,int depth)
+        {
+            if(depth>4||!Directory.Exists(dir))return;
+            try
+            {
+                foreach(var d in Directory.GetDirectories(dir))
+                    try{var di=new DirectoryInfo(d);if(di.Name.IndexOf(q,StringComparison.OrdinalIgnoreCase)>=0)out2.Add(new ContentItem{Name=di.Name,FullPath=di.FullName,DateModified=di.LastWriteTime,ItemType="File folder",IsDirectory=true});SearchDir(d,q,out2,depth+1);}catch{}
+                foreach(var f in Directory.GetFiles(dir))
+                    try{if(Path.GetFileName(f).IndexOf(q,StringComparison.OrdinalIgnoreCase)>=0){var fi=new FileInfo(f);out2.Add(new ContentItem{Name=fi.Name,FullPath=fi.FullName,DateModified=fi.LastWriteTime,ItemType=Shell.TypeName(fi.FullName),Size=fi.Length,IsDirectory=false});}}catch{}
+            }catch{}
+        }
         public void CutSelected(){if(_sel.Count==0)return;_cutPaths.Clear();foreach(int i in _sel)_cutPaths.Add(_items[i].FullPath);CopyClip(true);}
         public void CopySelected(){if(_sel.Count>0)CopyClip(false);}
         public void PasteFromClipboard()
@@ -1500,6 +1656,13 @@ namespace WinExplorer
         void DrawRows(Graphics g)
         {
             int lw=ListW(), tw=Math.Min(TotalW(),lw);
+            if(_searchMode&&_items.Count==0)
+            {
+                using(var fmt=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Near})
+                    g.DrawString("No items match your search.",Th.UiFont,MetaBrush,
+                        new RectangleF(0,HDR_H+10,lw,30),fmt);
+                return;
+            }
             var elp=new StringFormat{LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap};
             var rgt=new StringFormat(elp){Alignment=StringAlignment.Far};
             // Clip so rows never paint over the column header
@@ -1509,11 +1672,13 @@ namespace WinExplorer
             {
                 var it=_items[i]; int y=HDR_H+i*ROW_H-_scrollY;
                 if(y+ROW_H<=HDR_H)continue; if(y>Height)break;
-                bool sel=_sel.Contains(i),hov=i==_hovRow;
+                bool sel=_sel.Contains(i),hov=i==_hovRow,dndHov=i==_dndHovRow;
                 var row=new Rectangle(0,y,tw,ROW_H-1);
                 if(sel){if(_focused)Th.FillSel(g,row);else if(it.IsDirectory){using(var b=new SolidBrush(Th.InactiveDirFill))g.FillRectangle(b,row);}else{using(var p2=new Pen(Th.SelBorder))g.DrawRectangle(p2,row.X,row.Y,row.Width-1,row.Height-1);}}
-                else if(hov){Th.FillHover(g,row);}
-                var ico=it.Icon16??(Shell.SmallIcon(it.FullPath??string.Empty)??Icons.Get(it.IsDirectory?"folder":"file"));
+                else if(hov||dndHov){Th.FillHover(g,row);if(dndHov)using(var p2=new Pen(Th.SelBorder))g.DrawRectangle(p2,row.X,row.Y,row.Width-1,row.Height-1);}
+                // Resolve per-file-type icon; shell overrides when system_icons==1
+                string icoName=it.IsDirectory?"folder":FileIcon.Get(Path.GetExtension(it.Name));
+                var ico=it.Icon16??(Shell.SmallIcon(it.FullPath??string.Empty)??Icons.Get(icoName));
                 it.Icon16=ico;
                 g.DrawImage(ico,2,y+(ROW_H-ICO)/2,ICO,ICO);
                 bool cut=_cutPaths.Contains(it.FullPath??"");
@@ -1602,7 +1767,16 @@ namespace WinExplorer
         }
         // ── DnD drops INTO content pane ─────────────────────────────────────
         void OnDE(object s,DragEventArgs e){e.Effect=e.Data.GetDataPresent(DataFormats.FileDrop)?DragDropEffects.Copy:DragDropEffects.None;}
-        void OnDOv(object s,DragEventArgs e){e.Effect=e.Data.GetDataPresent(DataFormats.FileDrop)&&Directory.Exists(CurrentPath)?DragDropEffects.Copy:DragDropEffects.None;}
+        int _dndHovRow=-1;  // row being hovered during DnD
+        void OnDOv(object s,DragEventArgs e)
+        {
+            if(!e.Data.GetDataPresent(DataFormats.FileDrop)){e.Effect=DragDropEffects.None;return;}
+            var pt=PointToClient(new Point(e.X,e.Y));
+            int idx=RowAt(pt.Y);
+            bool onFolder=idx>=0&&idx<_items.Count&&_items[idx].IsDirectory;
+            _dndHovRow=onFolder?idx:-1;
+            e.Effect=DragDropEffects.Copy; Invalidate();
+        }
         void OnDD(object s,DragEventArgs e)
         {
             if(!e.Data.GetDataPresent(DataFormats.FileDrop)||!Directory.Exists(CurrentPath))return;
@@ -1744,7 +1918,9 @@ namespace WinExplorer
         void Wire()
         {
             _nav.BackClick+=(s,e)=>GoBack(); _nav.ForwardClick+=(s,e)=>GoFwd();
-            _nav.UpClick+=(s,e)=>GoUp(); _nav.Navigate+=p=>Navigate(p);
+            _nav.UpClick+=(s,e)=>GoUp(); _nav.ReloadClick+=(s,e)=>_content.LoadPath(_content.CurrentPath);
+            _nav.Navigate+=p=>Navigate(p);
+            _nav.SearchChanged+=q=>_content.SetSearch(q);
             _cmd.NewFolderClick+=(s,e)=>NewFolder();
             _cmd.HelpClick+=(s,e)=>Process.Start(new ProcessStartInfo("https://go.microsoft.com/fwlink/?LinkID=2004439"){UseShellExecute=true});
             _cmd.PreviewClick+=(s,e)=>{_preview.Visible=!_preview.Visible;if(_preview.Visible)_preview.ShowItem(_content.FirstSelected);};
