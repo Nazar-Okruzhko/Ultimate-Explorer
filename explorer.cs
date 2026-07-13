@@ -1,10 +1,10 @@
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 //  WINDOWS EXPLORER  –  GDI+ Recreation  v3
 //  .NET Framework 4.8  |  Single File
-// ───────────────────────────────────────────────────────────────────────────
-//  Icons  →  16×16 PNG files in  <exe-dir>\icons\Win10\
+// ---------------------------------------------------------------------------
+//  Icons  ?  16×16 PNG files in  <exe-dir>\icons\Win10\
 //  (see Icons.MakePlaceholder for names; real PNGs override auto-generated ones)
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
  
 using System;
 using System.Collections.Generic;
@@ -22,11 +22,11 @@ using System.Windows.Forms;
 using System.Collections.Specialized;
 using System.Reflection;
  
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 //  GLOBAL FEATURE FLAGS
-//  system_icons = 0  →  use embedded PNG icons (icons\Win10\*.png)
-//  system_icons = 1  →  use Windows shell / system icons
-// ═══════════════════════════════════════════════════════════════════════════
+//  system_icons = 0  ?  use embedded PNG icons (icons\Win10\*.png)
+//  system_icons = 1  ?  use Windows shell / system icons
+// ---------------------------------------------------------------------------
 static class Config { public static int system_icons = 0; }
  
 namespace WinExplorer
@@ -41,14 +41,14 @@ namespace WinExplorer
         }
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  Theme
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     static class Th
     {
         public static readonly Color SelFill        = Color.FromArgb(204, 232, 255);
         public static readonly Color SelBorder      = Color.FromArgb(153, 209, 255);
-        public static readonly Color ItemHover      = Color.FromArgb(229, 227, 255);
+        public static readonly Color ItemHover      = Color.FromArgb(229, 243, 255);
         public static readonly Color InactiveDirFill= Color.FromArgb(217, 217, 217);
         public static readonly Color HdrBg          = Color.White;
         public static readonly Color HdrHover       = Color.FromArgb(217, 235, 249);
@@ -100,9 +100,9 @@ namespace WinExplorer
         { Point[] t = {new Point(cx-3,cy-2),new Point(cx+3,cy-2),new Point(cx,cy+2)}; using(var b=new SolidBrush(c)) g.FillPolygon(b,t); }
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  Shell Helper  (Windows icons & thumbnails via P/Invoke)
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     static class Shell
     {
         [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)]
@@ -217,14 +217,14 @@ namespace WinExplorer
         }
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  PNG icon loader (fallback if Shell fails)
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     static class Icons
     {
         const int SZ=16;
  
-        // Map internal icon names → actual PNG filenames in the icons\Win10 folder
+        // Map internal icon names ? actual PNG filenames in the icons\Win10 folder
         static readonly Dictionary<string,string> NameMap=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase)
         {
             {"backward_arrow","previous_arrow"},
@@ -352,9 +352,9 @@ namespace WinExplorer
         }
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  Models & Enums
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     enum SortCol{Name,Date,Type,Size} enum SortDir{Asc,Desc} enum ViewMode{Details,LargeIcons,MediumIcons,SmallIcons,List,ExtraLargeIcons,Tiles,Content}
  
     class TreeNode2
@@ -372,9 +372,9 @@ namespace WinExplorer
         public string DateStr=>DateModified==default(DateTime)?"":(DateModified.ToString("M/d/yyyy h:mm tt"));
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  Menu renderer
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     class ExMenuRenderer:ToolStripProfessionalRenderer
     {
         public ExMenuRenderer():base(new ExColorTable()){}
@@ -404,9 +404,9 @@ namespace WinExplorer
         public static ContextMenuStrip MakeMenu(){return new ContextMenuStrip{Renderer=Rend,ShowImageMargin=true};}
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  TOP NAV BAR  (34 px)
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class TopNavBar:Panel
     {
         public const int H=34; const int BTN_H=22,BTN_Y=6,ICO=16,SM=14;
@@ -491,9 +491,9 @@ namespace WinExplorer
         protected override void OnCreateControl(){base.OnCreateControl();DoLayout();}
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  COMMAND BAR  (31 px)
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class CommandBar:Panel
     {
         public const int H=31; const int BTN_Y=3,BTN_H=26;
@@ -570,9 +570,9 @@ namespace WinExplorer
         protected override void OnCreateControl(){base.OnCreateControl();DoLayout();}
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  TREE PANE  (with hover + DnD drop target)
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class TreePane:Panel
     {
         const int ROW_H=22,ROOT_X=8,LVL=16,ICO=16,ARW=12;
@@ -732,7 +732,7 @@ namespace WinExplorer
         void Toggle(TreeNode2 n){if(!n.Expanded){if(n.Children.Count==0&&n.Path!=null&&!n.IsVirtual)LoadFs(n);n.Expanded=true;}else n.Expanded=false;Rebuild();}
         void LoadFs(TreeNode2 n){try{foreach(var d in Directory.GetDirectories(n.Path))try{n.Children.Add(new TreeNode2{Label=Path.GetFileName(d),Path=d,IconName="folder",Parent=n,Level=n.Level+1,HasChildren=true});}catch{}n.HasChildren=false;}catch{}}
         void OnMW(object s,MouseEventArgs e){_scrollY=Math.Max(0,_scrollY-e.Delta/3);if(_vsb.Visible){_scrollY=Math.Min(_scrollY,_vsb.Maximum-_vsb.LargeChange+1);_vsb.Value=_scrollY;}Invalidate();}
-        // ── DnD target ──
+        // -- DnD target --
         void OnDE(object s,DragEventArgs e){if(e.Data.GetDataPresent(DataFormats.FileDrop)||e.Data.GetDataPresent("FileNameW"))e.Effect=DragDropEffects.Copy;else e.Effect=DragDropEffects.None;}
         void OnDOv(object s,DragEventArgs e)
         {
@@ -755,9 +755,9 @@ namespace WinExplorer
         public void SelectPath(string path){if(path==null){_sel=null;Invalidate();return;}foreach(var n in _flat)if(n.Path!=null&&n.Path.Equals(path,StringComparison.OrdinalIgnoreCase)){_sel=n;Invalidate();return;}}
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  INLINE RENAME BOX
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class InlineRenameBox:TextBox
     {
         public int ItemIdx=-1;
@@ -769,9 +769,9 @@ namespace WinExplorer
         protected override bool IsInputKey(Keys k)=>k==Keys.Return||k==Keys.Escape||base.IsInputKey(k);
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  HEX VIEW PANEL
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class HexPanel:Panel
     {
         byte[]_data; int _scroll; const int BPR=16,RH=14,HH=18;
@@ -809,9 +809,9 @@ namespace WinExplorer
         void OnMW(object s,MouseEventArgs e){_scroll=Math.Max(0,_scroll-e.Delta/40);if(_vsb.Visible){_scroll=Math.Min(_scroll,Math.Max(0,_vsb.Maximum-_vsb.LargeChange));_vsb.Value=_scroll;}Invalidate();}
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  OBJ WIREFRAME PANEL
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class ObjPanel:Panel
     {
         struct V3{public float X,Y,Z;}
@@ -856,7 +856,7 @@ namespace WinExplorer
             _t.Start(); Invalidate();
         }
  
-        // ── OBJ ──────────────────────────────────────────────────────────
+        // -- OBJ ----------------------------------------------------------
         void LoadObj(string path)
         {
             var ci=System.Globalization.CultureInfo.InvariantCulture;
@@ -877,7 +877,7 @@ namespace WinExplorer
         }
         static int FI(string s){var sl=s.IndexOf('/');var t=sl>=0?s.Substring(0,sl):s;return int.TryParse(t,out int v)?v-1:0;}
  
-        // ── STL (ASCII & binary) ──────────────────────────────────────────
+        // -- STL (ASCII & binary) ------------------------------------------
         void LoadStl(string path)
         {
             var ci=System.Globalization.CultureInfo.InvariantCulture;
@@ -917,7 +917,7 @@ namespace WinExplorer
             }
         }
  
-        // ── PLY (ASCII) ───────────────────────────────────────────────────
+        // -- PLY (ASCII) ---------------------------------------------------
         void LoadPly(string path)
         {
             var ci=System.Globalization.CultureInfo.InvariantCulture;
@@ -1061,7 +1061,7 @@ namespace WinExplorer
             g.DrawString("Drag to rotate  •  Scroll to zoom",Th.UiSmall,new SolidBrush(Color.FromArgb(150,150,150)),3,3);
         }
  
-        // ── Vector helpers ─────────────────────────────────────────────────
+        // -- Vector helpers -------------------------------------------------
         static V3 SubV(V3 a,V3 b)=>new V3{X=a.X-b.X,Y=a.Y-b.Y,Z=a.Z-b.Z};
         static V3 CrossV(V3 a,V3 b)=>new V3{X=a.Y*b.Z-a.Z*b.Y,Y=a.Z*b.X-a.X*b.Z,Z=a.X*b.Y-a.Y*b.X};
         static float DotV(V3 a,V3 b)=>a.X*b.X+a.Y*b.Y+a.Z*b.Z;
@@ -1075,9 +1075,9 @@ namespace WinExplorer
         }
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  AUDIO PREVIEW PANEL
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class AudioPanel:Panel
     {
         [DllImport("winmm.dll",CharSet=CharSet.Unicode)]
@@ -1146,10 +1146,10 @@ namespace WinExplorer
         }
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  PREVIEW PANE  (360 px wide)
     //  Top 256 px: file content  |  Bottom: file info
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class VideoPanel:Panel
     {
         [DllImport("winmm.dll",CharSet=CharSet.Unicode)]
@@ -1244,7 +1244,7 @@ namespace WinExplorer
         }
         void Build()
         {
-            // ── top holder (256px) ──────────────────────────────────────────
+            // -- top holder (256px) ------------------------------------------
             _top=new Panel{Dock=DockStyle.Top,Height=TOP_H,BackColor=Color.White};
             // tab bar
             var tabs=new Panel{Dock=DockStyle.Top,Height=TAB_H,BackColor=Th.Bg};
@@ -1271,7 +1271,7 @@ namespace WinExplorer
             _content.Controls.AddRange(new Control[]{_iconLbl,_vidPanel,_audioPanel,_objPanel,_hexPanel,_rawTxtBox,_txtBox,_picBox});
             _top.Controls.Add(_content);
  
-            // ── info panel ─────────────────────────────────────────────────
+            // -- info panel -------------------------------------------------
             _info=new Panel{Dock=DockStyle.Fill,BackColor=Th.PreviewBg,Padding=new Padding(8,6,8,6)};
             _info.Paint+=PaintInfoSep;
             _lbName    =MkLbl(true);
@@ -1465,9 +1465,9 @@ namespace WinExplorer
         }
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  CONTENT PANE  (with shell icons, inline rename, DnD, extended marquee)
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     // Maps a file extension to the embedded icon name used in the UI
     static class FileIcon
     {
@@ -1534,7 +1534,7 @@ namespace WinExplorer
  
         public string CurrentPath{get;private set;}="";
         public event Action<ContentItem> ItemActivated;
-        // ── Search ──────────────────────────────────────────────────────────
+        // -- Search ----------------------------------------------------------
         string _searchQuery=""; bool _searchMode=false;
         List<ContentItem> _allItems=new List<ContentItem>();
         public event Action<ContentItem> SelectionChanged;
@@ -1561,7 +1561,7 @@ namespace WinExplorer
             BuildMenus();
         }
  
-        // ── Public API ─────────────────────────────────────────────────────
+        // -- Public API -----------------------------------------------------
         volatile int _loadTok=0;
  
         public void LoadPath(string path,bool keepScroll=false)
@@ -1649,7 +1649,7 @@ namespace WinExplorer
         public IEnumerable<string> SelectedPaths=>_sel.Select(i=>_items[i].FullPath);
         public ContentItem FirstSelected=>_sel.Count>0?_items[_sel.First()]:null;
  
-        // ── Layout ─────────────────────────────────────────────────────────
+        // -- Layout ---------------------------------------------------------
         int ListW()=>Width-(_vsb.Visible?_vsb.Width:0);
         int TotalW()=>_wN+_wD+_wT+_wS;
         int X1()=>_wN; int X2()=>_wN+_wD; int X3()=>_wN+_wD+_wT;
@@ -1658,7 +1658,7 @@ namespace WinExplorer
         int ColAt(int x){if(x<_wN)return 0;if(x<_wN+_wD)return 1;if(x<_wN+_wD+_wT)return 2;if(x<TotalW())return 3;return -1;}
         int DivAt(int x){if(NearDiv(x,Div0()))return 0;if(NearDiv(x,Div1()))return 1;if(NearDiv(x,Div2()))return 2;return -1;}
  
-        // ── Paint ──────────────────────────────────────────────────────────
+        // -- Paint ----------------------------------------------------------
         static readonly SolidBrush MetaBrush = new SolidBrush(Color.FromArgb(110,110,110));
  
         protected override void OnPaint(PaintEventArgs e)
@@ -1739,7 +1739,7 @@ namespace WinExplorer
             using(var p=new Pen(Th.SelBorder))g.DrawRectangle(p,x,y,w-1,h-1);
         }
  
-        // ── Mouse ──────────────────────────────────────────────────────────
+        // -- Mouse ----------------------------------------------------------
         void OnMD(object s,MouseEventArgs e)
         {
             Focus(); CancelRename();
@@ -1804,7 +1804,7 @@ namespace WinExplorer
             _sel.Clear();
             for(int i=0;i<_items.Count;i++){int ry=HDR_H+i*ROW_H-_scrollY;if(ry+ROW_H>y1&&ry<y2)_sel.Add(i);}
         }
-        // ── DnD drops INTO content pane ─────────────────────────────────────
+        // -- DnD drops INTO content pane -------------------------------------
         void OnDE(object s,DragEventArgs e){e.Effect=e.Data.GetDataPresent(DataFormats.FileDrop)?DragDropEffects.Copy:DragDropEffects.None;}
         int _dndHovRow=-1;  // row being hovered during DnD
         void OnDOv(object s,DragEventArgs e)
@@ -1846,7 +1846,7 @@ namespace WinExplorer
         }
         static void CopyDir(string s,string d){Directory.CreateDirectory(d);foreach(var f in Directory.GetFiles(s))File.Copy(f,Path.Combine(d,Path.GetFileName(f)));foreach(var sub in Directory.GetDirectories(s))CopyDir(sub,Path.Combine(d,Path.GetFileName(sub)));}
  
-        // ── Inline Rename ─────────────────────────────────────────────────
+        // -- Inline Rename -------------------------------------------------
         void BeginRename(int idx)
         {
             if(idx<0||idx>=_items.Count)return;
@@ -1878,7 +1878,7 @@ namespace WinExplorer
         }
         void CancelRename(){_rnBox.Visible=false;Focus();}
  
-        // ── Context Menus ─────────────────────────────────────────────────
+        // -- Context Menus -------------------------------------------------
         void BuildMenus()
         {
             _bgMenu=MI.MakeMenu();
@@ -1899,9 +1899,9 @@ namespace WinExplorer
         static ToolStripMenuItem OpenWithSub(){var s=MI.Sub("Open with","openwith");s.DropDownItems.Add(MI.Item("Choose another app...","openwith"));return s;}
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  Splitter bar
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     class SplitterBar:Control
     {
         bool _d;int _sx,_sw;Control _left;
@@ -1909,9 +1909,9 @@ namespace WinExplorer
         protected override void OnPaint(PaintEventArgs e)=>e.Graphics.Clear(Th.PaneSep);
     }
  
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     //  Status bar
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     class StatusBar:Panel
     {
         Label _l;
@@ -1920,9 +1920,9 @@ namespace WinExplorer
         protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);using(var p=new Pen(Th.PaneSep))e.Graphics.DrawLine(p,0,0,Width,0);}
     }
  
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     //  MAIN FORM
-    // ═════════════════════════════════════════════════════════════════════════
+    // -------------------------------------------------------------------------
     class ExplorerForm:Form
     {
         TopNavBar _nav; CommandBar _cmd; TreePane _tree; ContentPane _content;
