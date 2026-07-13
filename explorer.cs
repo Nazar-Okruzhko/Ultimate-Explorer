@@ -48,7 +48,7 @@ namespace WinExplorer
     {
         public static readonly Color SelFill        = Color.FromArgb(204, 232, 255);
         public static readonly Color SelBorder      = Color.FromArgb(153, 209, 255);
-        public static readonly Color ItemHover      = Color.FromArgb(229, 243, 255);
+        public static readonly Color ItemHover      = Color.FromArgb(229, 227, 255);
         public static readonly Color InactiveDirFill= Color.FromArgb(217, 217, 217);
         public static readonly Color HdrBg          = Color.White;
         public static readonly Color HdrHover       = Color.FromArgb(217, 235, 249);
@@ -446,11 +446,12 @@ namespace WinExplorer
             _rFwd=new Rectangle(x,BTN_Y,28,BTN_H);x+=28;
             _rRL=new Rectangle(x,BTN_Y,SM,BTN_H);x+=SM+2;
             _rUp=new Rectangle(x,BTN_Y,28,BTN_H);x+=28+4;
-            _rReload=new Rectangle(x,BTN_Y,28,BTN_H);x+=28+4;
-            const int sw=202,gap=12,rfw=SM;
-            int pw=Math.Max(60,Width-gap-sw-gap-rfw-2-x-1);
+            const int sw=202,gap=12,rfw=SM,reloadW=28;
+            // Path fills: Width - (what's already used) - recFold - reload - gap - search - end-gap
+            int pw=Math.Max(60,Width-x-rfw-4-reloadW-gap-sw-gap-2);
             _path.SetBounds(x+3,BTN_Y+3,pw-6,BTN_H-6); x+=pw+2;
-            _rRF=new Rectangle(x,BTN_Y,rfw,BTN_H); x+=rfw+gap;
+            _rRF=new Rectangle(x,BTN_Y,rfw,BTN_H); x+=rfw+4;
+            _rReload=new Rectangle(x,BTN_Y,reloadW,BTN_H); x+=reloadW+gap;
             _srchWrap.SetBounds(x,BTN_Y,sw,BTN_H);
             _srch.SetBounds(3,3,sw-22,BTN_H-6);
         }
@@ -1324,9 +1325,22 @@ namespace WinExplorer
             _lbSize.Text    ="Size: "+(item.IsDirectory?"":item.SizeStr);
  
             _hexPanel.Load(item.FullPath);
-            // Plain UTF-8 text tab – always populate
-            try{var rb=File.ReadAllText(item.FullPath,System.Text.Encoding.UTF8);_rawTxtBox.Text=rb.Length>80000?rb.Substring(0,80000)+"\n...[truncated]":rb;}
-            catch{_rawTxtBox.Text="(binary or unreadable)";}
+            // Plain UTF-8 text tab – lazy 128 KB read
+            System.Threading.Tasks.Task.Run(()=>
+            {
+                string result="";
+                try
+                {
+                    using(var sr=new StreamReader(item.FullPath,System.Text.Encoding.UTF8,true,8192))
+                    {
+                        var buf=new char[128*1024]; int read=sr.Read(buf,0,buf.Length);
+                        result=new string(buf,0,read);
+                        if(!sr.EndOfStream)result+="\n\n... [first 128 KB shown — file is larger] ...";
+                    }
+                }
+                catch(Exception ex){result="(error reading file: "+ex.Message+")";}
+                try{BeginInvoke((Action)(()=>{if(!IsDisposed)_rawTxtBox.Text=result;}));}catch{}
+            });
  
             string ext=item.FullPath!=null?Path.GetExtension(item.FullPath).ToLower():"";
             Control chosen;
@@ -1548,21 +1562,46 @@ namespace WinExplorer
         }
  
         // ── Public API ─────────────────────────────────────────────────────
-        public void LoadPath(string path)
+        volatile int _loadTok=0;
+ 
+        public void LoadPath(string path,bool keepScroll=false)
         {
             CancelRename();
-            CurrentPath=path;_items.Clear();_sel.Clear();_lastSel=-1;_scrollY=0;
-            if(string.IsNullOrEmpty(path)||!Directory.Exists(path)){Invalidate();return;}
-            try
+            CurrentPath=path; _searchMode=false; _searchQuery="";
+            _sel.Clear(); _lastSel=-1;
+            int saved=keepScroll?_scrollY:0;
+            _items=new List<ContentItem>(); _allItems=new List<ContentItem>();
+            if(!keepScroll){_scrollY=0;if(_vsb.Visible){try{_vsb.Value=0;}catch{}}}
+            Invalidate();
+            if(string.IsNullOrEmpty(path)||!Directory.Exists(path))return;
+ 
+            int tok=++_loadTok;
+            System.Threading.Tasks.Task.Run(()=>
             {
-                foreach(var d in Directory.GetDirectories(path))
-                    try{var di=new DirectoryInfo(d);_items.Add(new ContentItem{Name=di.Name,FullPath=di.FullName,DateModified=di.LastWriteTime,ItemType="File folder",IsDirectory=true});}catch{}
-                foreach(var f in Directory.GetFiles(path))
-                    try{var fi=new FileInfo(f);_items.Add(new ContentItem{Name=fi.Name,FullPath=fi.FullName,DateModified=fi.LastWriteTime,ItemType=Shell.TypeName(fi.FullName),Size=fi.Length,IsDirectory=false});}catch{}
-            }
-            catch{}
-            _allItems=new List<ContentItem>(_items);  // keep unfiltered copy for search
-            SortItems();UpdateScroll();Invalidate();
+                var list=new List<ContentItem>();
+                try
+                {
+                    foreach(var d in Directory.GetDirectories(path))
+                    {if(_loadTok!=tok)return;try{var di=new DirectoryInfo(d);list.Add(new ContentItem{Name=di.Name,FullPath=di.FullName,DateModified=di.LastWriteTime,ItemType="File folder",IsDirectory=true});}catch{}}
+                    foreach(var f in Directory.GetFiles(path))
+                    {if(_loadTok!=tok)return;try{var fi=new FileInfo(f);list.Add(new ContentItem{Name=fi.Name,FullPath=fi.FullName,DateModified=fi.LastWriteTime,ItemType=Shell.TypeName(fi.FullName),Size=fi.Length,IsDirectory=false});}catch{}}
+                }
+                catch{}
+                if(_loadTok!=tok||IsDisposed)return;
+                try
+                {
+                    BeginInvoke((Action)(()=>
+                    {
+                        if(_loadTok!=tok||IsDisposed)return;
+                        _items=list; _allItems=new List<ContentItem>(list);
+                        SortItems(); UpdateScroll();
+                        _scrollY=Math.Max(0,keepScroll?Math.Min(saved,Math.Max(0,_items.Count*ROW_H-ClientSize.Height+HDR_H)):0);
+                        if(_vsb.Visible)try{_vsb.Value=_scrollY;}catch{}
+                        Invalidate();
+                    }));
+                }
+                catch{}
+            });
         }
         public void SelectAll(){for(int i=0;i<_items.Count;i++)_sel.Add(i);Invalidate();}
         public void SetSearch(string query)
