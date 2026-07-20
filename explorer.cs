@@ -67,6 +67,8 @@ namespace WinExplorer
         public static readonly Color PreviewBg      = Color.FromArgb(250, 250, 252);
         // CommandBar
         public static readonly Color CmdBarBg  = Color.FromArgb(245,246,247); // #F5F6F7
+        public static readonly Color HdrTextClr = Color.FromArgb(76,96,122);   // #4C607A column header
+        public static readonly Color RowMetaClr = Color.FromArgb(109,109,109); // #6D6D6D row meta values
         public static readonly Color CmdSepBot = Color.FromArgb(232,233,234); // #E8E9EA
         // Arrow button overlays
         public static readonly Color ArrHovOverlay = Color.FromArgb(40,0,120,215);   // blue tint
@@ -116,6 +118,15 @@ namespace WinExplorer
         static extern IntPtr SHGetFileInfo(string path,uint fileAttr,ref SHFILEINFO sfi,uint sz,uint flags);
         [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
         [DllImport("gdi32.dll")]  static extern bool DeleteObject(IntPtr h);
+        [DllImport("shell32.dll",CharSet=CharSet.Unicode)] static extern int SHFileOperationW(ref SHFILEOPSTRUCT op);
+        [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]
+        struct SHFILEOPSTRUCT{public IntPtr hwnd;[MarshalAs(UnmanagedType.U4)]public uint wFunc;[MarshalAs(UnmanagedType.LPWStr)]public string pFrom;[MarshalAs(UnmanagedType.LPWStr)]public string pTo;public ushort fFlags;[MarshalAs(UnmanagedType.Bool)]public bool fAnyOperationsAborted;public IntPtr hNameMappings;[MarshalAs(UnmanagedType.LPWStr)]public string lpszProgressTitle;}
+        public static void Recycle(IEnumerable<string> paths)
+        {
+            var ps=paths.Where(p=>p!=null).ToArray(); if(ps.Length==0)return;
+            var op=new SHFILEOPSTRUCT{wFunc=3,pFrom=string.Join("\0",ps)+"\0\0",fFlags=0x0040|0x0010}; // FO_DELETE|FOF_ALLOWUNDO|FOF_NOCONFIRMATION
+            SHFileOperationW(ref op);
+        }
  
         [DllImport("shell32.dll",CharSet=CharSet.Unicode,SetLastError=false)]
         static extern int SHCreateItemFromParsingName(string path,IntPtr pbc,ref Guid riid,
@@ -453,6 +464,14 @@ namespace WinExplorer
         public bool ForwardEnabled{set{_fwdOn=value;Invalidate();}}
         public event EventHandler BackClick,ForwardClick,UpClick,ReloadClick;
         string _srchPlaceholder="Search";
+        ToolTip _tip=new ToolTip{AutoPopDelay=5000,InitialDelay=600,ReshowDelay=200,ShowAlways=true};
+        string _tipText="";
+        public void UpdateButtonTips(string parentFolder,string currentFolder)
+        {
+            _upTip="Up to "+parentFolder+" (Alt+Up Arrow)";
+            _reloadTip="Refresh "+currentFolder+" (F5)";
+        }
+        string _upTip="Up (Alt+Up Arrow)",_reloadTip="Refresh (F5)";
         public void SetSearchFolder(string folderName)
         {
             _srchPlaceholder="Search "+folderName;
@@ -473,10 +492,23 @@ namespace WinExplorer
             _srch.LostFocus+=(s,e)=>{if(_srch.Text==""){_srch.Text=_srchPlaceholder;_srch.ForeColor=Th.TxtDisabled;}};
             _srch.TextChanged+=(s,e)=>SearchChanged?.Invoke(_srch.ForeColor==Th.TxtDisabled?"":_srch.Text);
             _srchWrap.Controls.Add(_srch); Controls.Add(_srchWrap);
-            MouseMove+=(s,e)=>{var h=HitAt(e.Location);if(h!=_hov){_hov=h;Invalidate();}};
+            MouseMove+=(s,e)=>{var h=HitAt(e.Location);if(h!=_hov){_hov=h;Invalidate();}ShowTip(h,e.Location);};
             MouseLeave+=(s,e)=>{_hov=Hit.None;Invalidate();};
             MouseDown+=(s,e)=>{if(e.Button==MouseButtons.Left){_prs=HitAt(e.Location);Invalidate();}};
             MouseUp+=OnMU; Resize+=(s,e)=>DoLayout();
+        }
+        void ShowTip(Hit h,Point loc)
+        {
+            string t="";
+            switch(h){
+                case Hit.Back:    t="Back (Alt+Left Arrow)"; break;
+                case Hit.Fwd:     t="Forward (Alt+Right Arrow)"; break;
+                case Hit.RecLoc:  t="Recent Locations"; break;
+                case Hit.Up:      t=_upTip; break;
+                case Hit.RecFold: t="Previous Locations"; break;
+                case Hit.Reload:  t=_reloadTip; break;
+            }
+            if(t!=_tipText){_tipText=t;if(string.IsNullOrEmpty(t))_tip.Hide(this);else _tip.Show(t,this,loc.X+10,loc.Y+18,4000);}
         }
         void PaintSrch(object s,PaintEventArgs e)
         {e.Graphics.Clear(Color.White);using(var p=new Pen(Th.PaneSep))e.Graphics.DrawRectangle(p,0,0,_srchWrap.Width-1,_srchWrap.Height-1);e.Graphics.DrawImage(Icons.Get("search"),_srchWrap.Width-19,3,14,14);}
@@ -577,8 +609,9 @@ namespace WinExplorer
                 MI.Item("Close","file",(s,e)=>OrgClose?.Invoke(this,EventArgs.Empty))});
             _viewMenu=MI.MakeMenu();
             var modeLabels=new[]{"Extra Large Icons","Large Icons","Medium Icons","Small Icons","List","Details","Tiles","Content"};
+            var modeIcons=new[]{"extra_large_icons","large_icons","medium_icons","small_icons","list","details","tiles","content"};
             var modeVals=new[]{ViewMode.ExtraLargeIcons,ViewMode.LargeIcons,ViewMode.MediumIcons,ViewMode.SmallIcons,ViewMode.List,ViewMode.Details,ViewMode.Tiles,ViewMode.Content};
-            for(int mi2=0;mi2<modeLabels.Length;mi2++){var vm2=modeVals[mi2];_viewMenu.Items.Add(MI.Item(modeLabels[mi2],"change_view",(s,e)=>ViewChanged?.Invoke(vm2)));}
+            for(int mi2=0;mi2<modeLabels.Length;mi2++){var vm2=modeVals[mi2];_viewMenu.Items.Add(MI.Item(modeLabels[mi2],modeIcons[mi2],(s,e)=>ViewChanged?.Invoke(vm2)));}
         }
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -1360,11 +1393,11 @@ namespace WinExplorer
         public const int PW=360; const int TOP_H=256,TAB_H=20;
  
         Panel _top; Panel _content; Panel _info;
-        Button _btnPrev,_btnHex,_btnTxt;
+        Button _btnPrev,_btnHex,_btnTxt; Label _tabNameLbl;
         PictureBox _picBox; RichTextBox _txtBox; RichTextBox _rawTxtBox; HexPanel _hexPanel; ObjPanel _objPanel; AudioPanel _audioPanel; VideoPanel _vidPanel; Label _iconLbl;
         bool _showHex; Control _activePreview;
  
-        Label _lbName,_lbType,_lbPath,_lbModified,_lbSize;
+        Label _lbName; TextBox _tbType,_tbPath,_tbModified,_tbSize;
  
         public PreviewPane()
         {
@@ -1378,15 +1411,21 @@ namespace WinExplorer
             _top=new Panel{Dock=DockStyle.Top,Height=TOP_H,BackColor=Color.White};
             // tab bar
             var tabs=new Panel{Dock=DockStyle.Top,Height=TAB_H,BackColor=Th.Bg};
-            _btnPrev=new Button{Text="Preview",FlatStyle=FlatStyle.Flat,Width=72,Height=TAB_H,Dock=DockStyle.Left,Font=Th.UiSmall,BackColor=Th.SelFill};
+            // Filename label fills left; tabs dock to RIGHT
+            _btnPrev=new Button{Text="Preview",FlatStyle=FlatStyle.Flat,Width=58,Height=TAB_H,Dock=DockStyle.Right,Font=Th.UiSmall,BackColor=Th.SelFill};
             _btnPrev.FlatAppearance.BorderSize=0;
-            _btnHex =new Button{Text="Hex",FlatStyle=FlatStyle.Flat,Width=40,Height=TAB_H,Dock=DockStyle.Left,Font=Th.UiSmall,BackColor=Color.Transparent};
+            _btnHex =new Button{Text="Hex",FlatStyle=FlatStyle.Flat,Width=36,Height=TAB_H,Dock=DockStyle.Right,Font=Th.UiSmall,BackColor=Color.Transparent};
             _btnHex.FlatAppearance.BorderSize=0;
-            _btnTxt =new Button{Text="Text",FlatStyle=FlatStyle.Flat,Width=44,Height=TAB_H,Dock=DockStyle.Left,Font=Th.UiSmall,BackColor=Color.Transparent};
+            _btnTxt =new Button{Text="Text",FlatStyle=FlatStyle.Flat,Width=40,Height=TAB_H,Dock=DockStyle.Right,Font=Th.UiSmall,BackColor=Color.Transparent};
             _btnTxt.FlatAppearance.BorderSize=0;
+            _tabNameLbl=new Label{Dock=DockStyle.Fill,Font=Th.UiFont,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(6,0,0,0),ForeColor=Th.TxtColor,Text="",BackColor=Color.Transparent};
+            // Order: Fill first (lowest idx), then Right buttons (highest idx = rightmost)
+            tabs.Controls.Add(_tabNameLbl);
+            tabs.Controls.Add(_btnPrev);
+            tabs.Controls.Add(_btnTxt);
+            tabs.Controls.Add(_btnHex);
             _btnPrev.Click+=(s,e)=>SetHex(false); _btnHex.Click+=(s,e)=>SetHex(true);
             // _btnTxt wired after Build() – see constructor below
-            tabs.Controls.Add(_btnHex); tabs.Controls.Add(_btnTxt); tabs.Controls.Add(_btnPrev);
             _top.Controls.Add(tabs);
             // content area
             _content=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,20,0,0),BackColor=Color.White};
@@ -1404,26 +1443,28 @@ namespace WinExplorer
             // ── info panel ─────────────────────────────────────────────────
             _info=new Panel{Dock=DockStyle.Fill,BackColor=Th.PreviewBg,Padding=new Padding(8,6,8,6)};
             _info.Paint+=PaintInfoSep;
-            _lbName    =MkLbl(true);
-            _lbType    =MkPropLbl("Type:");
-            _lbPath    =MkPropLbl("Location:");
-            _lbModified=MkPropLbl("Date modified:");
-            _lbSize    =MkPropLbl("Size:");
-            // reverse add for DockStyle.Top ordering
-            _info.Controls.Add(_lbSize); _info.Controls.Add(_lbModified);
-            _info.Controls.Add(_lbPath); _info.Controls.Add(_lbType); _info.Controls.Add(_lbName);
+            _lbName=new Label{Dock=DockStyle.Top,Height=28,Font=Th.UiBold,AutoSize=false,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.Black};
+            // two-column grid: label (Black) + read-only TextBox for value
+            var _grid=new TableLayoutPanel{Dock=DockStyle.Top,Height=120,ColumnCount=2,RowCount=4,Padding=new Padding(0,4,0,0),BackColor=Color.Transparent};
+            _grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,88f));
+            _grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
+            for(int _ri=0;_ri<4;_ri++)_grid.RowStyles.Add(new RowStyle(SizeType.Absolute,28f));
+            string[]_pn={"Type","Location","Modified","Size"};
+            var _pvArr=new TextBox[4];
+            for(int _i=0;_i<4;_i++){
+                var _pl=new Label{Text=_pn[_i]+":",TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.Black,Font=Th.UiFont,Dock=DockStyle.Fill,Margin=Padding.Empty};
+                var _pt=new TextBox{ReadOnly=true,BorderStyle=BorderStyle.FixedSingle,BackColor=Color.White,Font=Th.UiFont,Dock=DockStyle.Fill,Margin=new Padding(0,2,2,2)};
+                _grid.Controls.Add(_pl,0,_i); _grid.Controls.Add(_pt,1,_i);
+                _pvArr[_i]=_pt;
+            }
+            _tbType=_pvArr[0]; _tbPath=_pvArr[1]; _tbModified=_pvArr[2]; _tbSize=_pvArr[3];
+            _info.Controls.Add(_grid); _info.Controls.Add(new Panel{Dock=DockStyle.Top,Height=1,BackColor=Th.HdrBorder}); _info.Controls.Add(_lbName);
  
             Controls.Add(_info); Controls.Add(_top);
  
             Paint+=(s2,e2)=>{using(var p=new Pen(Th.PaneSep))e2.Graphics.DrawLine(p,0,0,0,Height);};
         }
         static void PaintInfoSep(object s,PaintEventArgs e){using(var p=new Pen(Th.HdrBorder))e.Graphics.DrawLine(p,0,0,((Control)s).Width,0);}
-        static Label MkLbl(bool bold){return new Label{Dock=DockStyle.Top,Height=24,Font=bold?Th.UiBold:Th.UiFont,AutoSize=false,TextAlign=ContentAlignment.MiddleLeft};}
-        static Label MkPropLbl(string prefix)
-        {
-            var l=new Label{Dock=DockStyle.Top,Height=20,Font=Th.UiFont,AutoSize=false,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Th.TxtDisabled};
-            l.Tag=prefix; return l;
-        }
         void SetHex(bool hex)
         {
             _showHex=hex;
@@ -1448,11 +1489,11 @@ namespace WinExplorer
         public void ShowItem(ContentItem item)
         {
             if(item==null){Clear();return;}
-            _lbName.Text=item.Name;
-            _lbType.Text    ="Type: "+(item.IsDirectory?"File folder":item.ItemType);
-            _lbPath.Text    ="Location: "+(item.FullPath!=null?Path.GetDirectoryName(item.FullPath):"");
-            _lbModified.Text="Date modified: "+item.DateStr;
-            _lbSize.Text    ="Size: "+(item.IsDirectory?"":item.SizeStr);
+            _lbName.Text  =item.Name; if(_tabNameLbl!=null)_tabNameLbl.Text=item.Name;
+            _tbType.Text    =item.IsDirectory?"File folder":item.ItemType;
+            _tbPath.Text    =item.FullPath!=null?Path.GetDirectoryName(item.FullPath)??"":"";
+            _tbModified.Text=item.DateStr;
+            _tbSize.Text    =item.IsDirectory?"":item.SizeStr;
  
             _hexPanel.Load(item.FullPath);
             // Plain UTF-8 text tab – lazy 128 KB read
@@ -1539,7 +1580,7 @@ namespace WinExplorer
  
         public void Clear()
         {
-            _lbName.Text=""; _lbType.Text=""; _lbPath.Text=""; _lbModified.Text=""; _lbSize.Text="";
+            _lbName.Text=""; if(_tabNameLbl!=null)_tabNameLbl.Text=""; _tbType.Text=""; _tbPath.Text=""; _tbModified.Text=""; _tbSize.Text="";
             _iconLbl.Image=null; _iconLbl.Text="No selection"; _picBox.Image=null; _txtBox.Text=""; _rawTxtBox.Text="";
             _activePreview=_iconLbl; ShowCtrl(_iconLbl);
         }
@@ -1681,10 +1722,9 @@ namespace WinExplorer
             return Map.TryGetValue(ext,out var n)?n:"file";
         }
     }
- 
     class ContentPane:Panel
     {
-        const int HDR_H=25,ROW_H=22,ICO=16,DIV=4;
+        const int HDR_H=25,ROW_H=22,ICO=16,DIV=4,ITEM_INDENT=15,HDR_INDENT=1;
  
         int _wN=272,_wD=120,_wT=120,_wS=80;
         List<ContentItem> _items=new List<ContentItem>();
@@ -1733,6 +1773,7 @@ namespace WinExplorer
  
         // ── Public API ─────────────────────────────────────────────────────
         volatile int _loadTok=0;
+        string _pendingRename=null;  // used inside BeginInvoke lambda
  
         public void LoadPath(string path,bool keepScroll=false)
         {
@@ -1768,12 +1809,24 @@ namespace WinExplorer
                         _scrollY=Math.Max(0,keepScroll?Math.Min(saved,Math.Max(0,_items.Count*ROW_H-ClientSize.Height+HDR_H)):0);
                         if(_vsb.Visible)try{_vsb.Value=_scrollY;}catch{}
                         Invalidate();
+                    // Auto-rename triggered by LoadPathAndRename
+                    if(_pendingRename!=null){
+                        string _pr=_pendingRename; _pendingRename=null;
+                        int _pri=_items.FindIndex(it2=>it2.Name.Equals(_pr,StringComparison.OrdinalIgnoreCase));
+                        if(_pri>=0){_sel.Clear();_sel.Add(_pri);_lastSel=_pri;
+                            BeginInvoke((Action)(()=>{if(!IsDisposed)BeginRename(_pri);}));}
+                    }
                     }));
                 }
                 catch{}
             });
         }
         public void SelectAll(){for(int i=0;i<_items.Count;i++)_sel.Add(i);Invalidate();}
+        public void LoadPathAndRename(string path,string nameToSelect)
+        {
+            _pendingRename=nameToSelect;
+            LoadPath(path,keepScroll:true);
+        }
         public void SetSearch(string query)
         {
             _searchQuery=(query??string.Empty).Trim();
@@ -1810,10 +1863,8 @@ namespace WinExplorer
         public void DeleteSelected()
         {
             if(_sel.Count==0)return;
-            string msg=_sel.Count==1?$"Delete '{_items[_sel.First()].Name}'?":$"Delete {_sel.Count} items?";
-            if(MessageBox.Show(msg,"Delete",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-            foreach(int i in _sel.OrderByDescending(x=>x))try{var it=_items[i];if(it.IsDirectory)Directory.Delete(it.FullPath,true);else File.Delete(it.FullPath);}catch(Exception ex){MessageBox.Show(ex.Message,"Delete Error",MessageBoxButtons.OK,MessageBoxIcon.Error);}
-            LoadPath(CurrentPath);
+            Shell.Recycle(_sel.Select(i=>_items[i].FullPath));
+            LoadPath(CurrentPath,keepScroll:true);
         }
         public void StartRename(){if(_sel.Count==1)BeginRename(_sel.First());}
         public IEnumerable<string> SelectedPaths=>_sel.Select(i=>_items[i].FullPath);
@@ -1830,6 +1881,8 @@ namespace WinExplorer
  
         // ── Paint ──────────────────────────────────────────────────────────
         static readonly SolidBrush MetaBrush = new SolidBrush(Color.FromArgb(110,110,110));
+        static readonly SolidBrush _rowMetaBrush = new SolidBrush(Th.RowMetaClr);
+        static readonly SolidBrush _hdrMetaBrush = new SolidBrush(Th.HdrTextClr);
  
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -1855,7 +1908,7 @@ namespace WinExplorer
                 if(_hdrHovCol==i&&_hdrHovDiv<0)
                     g.FillRectangle(new SolidBrush(Th.HdrHover),x,0,cw,HDR_H-1);
                 // Grey label, same thin font as filenames
-                g.DrawString(lbls[i],Th.UiFont,MetaBrush,new RectangleF(x+4,0,cw-14,HDR_H),fmt);
+                g.DrawString(lbls[i],Th.UiFont,_hdrMetaBrush,new RectangleF(x+HDR_INDENT+4,0,cw-14,HDR_H),fmt);
                 if(scs[i]==_sortCol)
                 {int ax=x+cw-10,ay=HDR_H/2;if(_sortDir==SortDir.Asc)g.FillPolygon(MetaBrush,new[]{new Point(ax-3,ay+2),new Point(ax+3,ay+2),new Point(ax,ay-2)});else g.FillPolygon(MetaBrush,new[]{new Point(ax-3,ay-2),new Point(ax+3,ay-2),new Point(ax,ay+2)});}
                 if(i<3&&x+w<lw)using(var sp=new Pen(Color.FromArgb(220,220,220)))g.DrawLine(sp,x+w-1,3,x+w-1,HDR_H-3);
@@ -1892,14 +1945,14 @@ namespace WinExplorer
                 bool _perFile=Shell.PerFileExt.Contains(_ext2);
                 var ico=it.Icon16??(_perFile?Shell.SmallIconForced(it.FullPath??string.Empty):Shell.SmallIcon(it.FullPath??string.Empty))??Icons.Get(icoName);
                 if(it.Icon16==null)it.Icon16=ico;
-                g.DrawImage(ico,2,y+(ROW_H-ICO)/2,ICO,ICO);
+                g.DrawImage(ico,ITEM_INDENT+2,y+(ROW_H-ICO)/2,ICO,ICO);
                 bool cut=_cutPaths.Contains(it.FullPath??"");
                 var nameBrush=cut?new SolidBrush(Color.FromArgb(160,0,0,0)):Brushes.Black;
-                g.DrawString(it.Name,Th.UiFont,nameBrush,new RectangleF(ICO+6,y,_wN-ICO-10,ROW_H),elp);
+                g.DrawString(it.Name,Th.UiFont,nameBrush,new RectangleF(ITEM_INDENT+ICO+6,y,_wN-ICO-10,ROW_H),elp);
                 // Date, Type, Size in grey
-                if(X1()<lw)g.DrawString(it.DateStr,Th.UiFont,MetaBrush,new RectangleF(X1()+4,y,_wD-8,ROW_H),elp);
-                if(X2()<lw)g.DrawString(it.ItemType,Th.UiFont,MetaBrush,new RectangleF(X2()+4,y,_wT-8,ROW_H),elp);
-                if(X3()<lw)g.DrawString(it.SizeStr,Th.UiFont,MetaBrush,new RectangleF(X3()+2,y,_wS-4,ROW_H),rgt);
+                if(X1()<lw)g.DrawString(it.DateStr,Th.UiFont,_rowMetaBrush,new RectangleF(X1()+ITEM_INDENT+4,y,_wD-8,ROW_H),elp);
+                if(X2()<lw)g.DrawString(it.ItemType,Th.UiFont,_rowMetaBrush,new RectangleF(X2()+ITEM_INDENT+4,y,_wT-8,ROW_H),elp);
+                if(X3()<lw)g.DrawString(it.SizeStr,Th.UiFont,_rowMetaBrush,new RectangleF(X3()+ITEM_INDENT+2,y,_wS-4,ROW_H),rgt);
                 if(cut&&nameBrush!=Brushes.Black)(nameBrush as SolidBrush)?.Dispose();
             }
             g.Clip=oldClip;
@@ -1921,8 +1974,8 @@ namespace WinExplorer
             if(e.Button==MouseButtons.Left)
             {
                 bool ctrl=(ModifierKeys&Keys.Control)!=0,shift=(ModifierKeys&Keys.Shift)!=0;
-                // Only treat as item-click when X is within the columns area
-                if(idx>=0&&idx<_items.Count&&e.X<=TotalW())
+                // Only treat as item-click when X is before the Size column
+                if(idx>=0&&idx<_items.Count&&e.X<X3()+ITEM_INDENT+_wS)
                 {
                     if(ctrl){if(_sel.Contains(idx))_sel.Remove(idx);else _sel.Add(idx);_lastSel=idx;}
                     else if(shift&&_lastSel>=0){_sel.Clear();for(int i=Math.Min(_lastSel,idx);i<=Math.Max(_lastSel,idx);i++)_sel.Add(i);}
@@ -2203,7 +2256,7 @@ namespace WinExplorer
         {
             string cur=_content.CurrentPath; if(!Directory.Exists(cur))return;
             string p=Path.Combine(cur,"New folder"); int i=2; while(Directory.Exists(p))p=Path.Combine(cur,$"New folder ({i++})");
-            try{Directory.CreateDirectory(p);_content.LoadPath(cur);SetStatus($"Created: {Path.GetFileName(p)}");}catch(Exception ex){MessageBox.Show(ex.Message,"Error",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+            try{Directory.CreateDirectory(p);_content.LoadPathAndRename(cur,Path.GetFileName(p));SetStatus($"Created: {Path.GetFileName(p)}");}catch(Exception ex){MessageBox.Show(ex.Message,"Error",MessageBoxButtons.OK,MessageBoxIcon.Error);}
         }
         void ShowProps(){string p=_content.CurrentPath;if(Directory.Exists(p))MessageBox.Show($"Path: {p}","Properties",MessageBoxButtons.OK,MessageBoxIcon.Information);}
         void PerformDrop(string[] srcs,string dest)
