@@ -1,9 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <!-- Targets .NET 6.0 Windows -->
     <TargetFramework>net6.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <RootNamespace>explorer</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>explorer</AssemblyName>
+    <RootNamespace>explorer</RootNamespace>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Platforms>AnyCPU</Platforms>
+    <!--
+      ICON: place Icon1.ico next to the .csproj for the window/taskbar icon.
+      CONFIG: set Config.system_icons in Program.cs:
+        0 = embedded PNG icons (icons\Win10\*.png compiled into the exe)
+        1 = Windows shell icons
+    -->
   </PropertyGroup>
+  <ItemGroup>
+    <!-- All PNGs in icons\Win10\ are embedded as resources -->
+    <EmbeddedResource Include="icons\Win10\*.png" Condition="Exists('icons\Win10')" />
+  </ItemGroup>
 </Project>
+ 
